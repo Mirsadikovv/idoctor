@@ -4,56 +4,73 @@ import (
 	"log"
 
 	"idoctor-bot/app/config"
+	"idoctor-bot/app/i18n"
 	"idoctor-bot/app/models"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"gorm.io/gorm"
 )
 
-func Menu(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB) {
+func Menu(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB, langCache *i18n.LanguageCache) {
 	var user models.User
-	
-	// Получаем пользователя из базы данных
 	if err := db.Where("telegram_id = ?", update.Message.From.ID).First(&user).Error; err != nil {
-		sendMessage(bot, update.Message.Chat.ID, "❌ Пользователь не найден. Используйте /start для регистрации.")
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(i18n.UserNotFound, langCache.Get(update.Message.From.ID)))
 		return
 	}
 
-	menuMessage := "🔧 Главное меню\n\n"
+	lang := user.GetLanguage()
+	langCache.Set(update.Message.From.ID, lang)
+
+	welcomeMessage := i18n.GetText(i18n.WelcomeMessage, lang) + "\n\n"
 	
 	if user.Role == models.UserRoleAdmin {
-		menuMessage += "👑 Панель администратора:\n\n"
-		menuMessage += "📊 Все заказы - Просмотр всех заказов в системе\n"
-		menuMessage += "➕ Новый заказ - Создать новый заказ\n"
-		menuMessage += "👥 Мастера - Управление мастерами\n"
-		menuMessage += "📈 Аналитика - Статистика и отчеты\n"
+		welcomeMessage += i18n.GetText(i18n.AdminWelcome, lang) + "\n\n"
 	} else {
-		menuMessage += "🔨 Панель мастера:\n\n"
-		menuMessage += "📋 Мои заказы - Просмотр ваших заказов\n"
-		menuMessage += "🔧 Меню - Это меню\n"
+		welcomeMessage += i18n.GetText(i18n.MasterWelcome, lang) + "\n\n"
 	}
 
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, menuMessage)
-	msg.ReplyMarkup = getMainKeyboard(user.Role == models.UserRoleAdmin)
+	welcomeMessage += i18n.GetText(i18n.UseMenuBelow, lang)
+
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, welcomeMessage)
+	msg.ReplyMarkup = getMainKeyboard(user.Role == models.UserRoleAdmin, lang)
 
 	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Ошибка отправки меню: %v", err)
+		log.Printf("Error sending menu: %v", err)
 	}
 }
 
-func Help(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	helpMessage := "🆘 Помощь - Система ремонтной мастерской\n\n"
-	helpMessage += "📱 Доступные команды:\n"
-	helpMessage += "• /start - Регистрация в системе\n"
-	helpMessage += "• /menu - Главное меню\n"
-	helpMessage += "• /orders - Просмотр заказов\n"
-	helpMessage += "• /help - Эта справка\n\n"
-	helpMessage += "🔧 Функции системы:\n"
-	helpMessage += "• Управление заказами\n"
-	helpMessage += "• Отслеживание статуса ремонта\n"
-	helpMessage += "• Управление запчастями\n"
-	helpMessage += "• Аналитика и отчеты (для админов)\n\n"
-	helpMessage += "❓ По вопросам обращайтесь к администратору."
+func Help(bot *tgbotapi.BotAPI, update tgbotapi.Update, langCache *i18n.LanguageCache) {
+	lang := langCache.Get(update.Message.From.ID)
+	
+	// Создаем inline клавиатуру для дополнительных опций
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(
+				i18n.GetText(map[string]string{
+					"ru": "📞 Связаться с поддержкой",
+					"uz": "📞 Qo'llab-quvvatlash bilan bog'lanish",
+					"en": "📞 Contact Support",
+				}, lang),
+				"help_contact",
+			),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(
+				i18n.GetText(map[string]string{
+					"ru": "🔧 О системе",
+					"uz": "🔧 Tizim haqida",
+					"en": "🔧 About System",
+				}, lang),
+				"help_about",
+			),
+		),
+	)
+	
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, i18n.GetText(i18n.HelpText, lang))
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = keyboard
 
-	sendMessage(bot, update.Message.Chat.ID, helpMessage)
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending help: %v", err)
+	}
 }

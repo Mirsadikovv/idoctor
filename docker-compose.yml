@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  idoctor-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: idoctor-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - TZ=UTC
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - idoctor-network
+    volumes:
+      - ./logs:/app/logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: idoctor-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-repair_bot}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - idoctor-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: idoctor-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - idoctor-network
+    command: redis-server --appendonly yes
+
+  # Опциональный web интерфейс для мониторинга
+  adminer:
+    image: adminer
+    container_name: idoctor-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    networks:
+      - idoctor-network
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  idoctor-network:
+    driver: bridge

@@ -4,226 +4,257 @@ import (
 	"fmt"
 	"log"
 
+	"idoctor-bot/app/api"
 	"idoctor-bot/app/config"
+	"idoctor-bot/app/i18n"
 	"idoctor-bot/app/models"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"gorm.io/gorm"
 )
 
-func MyOrders(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB) {
+// MyOrders показывает заказы пользователя
+func MyOrders(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB, langCache *i18n.LanguageCache) {
+	lang := langCache.Get(update.Message.From.ID)
+
+	// Получаем пользователя
 	var user models.User
-	
-	// Получаем пользователя из базы данных
 	if err := db.Where("telegram_id = ?", update.Message.From.ID).First(&user).Error; err != nil {
-		sendMessage(bot, update.Message.Chat.ID, "❌ Пользователь не найден. Используйте /start для регистрации.")
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(i18n.UserNotFound, lang))
 		return
 	}
 
-	var devices []models.Device
-	query := db.Preload("Customer").Preload("Master")
-
-	if user.Role == models.UserRoleMaster {
-		// Мастер видит только свои заказы
-		query = query.Where("master_id = ?", user.ID)
-	}
-
-	if err := query.Find(&devices).Error; err != nil {
-		log.Printf("Ошибка получения заказов: %v", err)
-		sendMessage(bot, update.Message.Chat.ID, "❌ Ошибка получения заказов.")
-		return
-	}
-
-	if len(devices) == 0 {
-		var message string
-		if user.Role == models.UserRoleMaster {
-			message = "📋 У вас пока нет назначенных заказов."
-		} else {
-			message = "📋 В системе пока нет заказов."
-		}
-		sendMessage(bot, update.Message.Chat.ID, message)
-		return
-	}
-
-	message := fmt.Sprintf("📋 %s (%d):\n\n", getOrdersTitle(user.Role), len(devices))
-
-	for i, device := range devices {
-		if i >= 10 { // Ограничиваем до 10 заказов на страницу
-			message += fmt.Sprintf("... и еще %d заказов\n", len(devices)-i)
-			break
+	if cfg.API.Enabled {
+		// Используем API
+		apiClient := api.NewAPIClient(cfg.API.BaseURL, cfg.API.APIKey)
+		devices, err := apiClient.GetDevicesByMaster(user.ID)
+		if err != nil {
+			log.Printf("Error getting devices from API: %v", err)
+			sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+				"ru": "❌ Ошибка получения данных",
+				"uz": "❌ Ma'lumotlarni olishda xatolik",
+				"en": "❌ Error getting data",
+			}, lang))
+			return
 		}
 
-		message += fmt.Sprintf("🔹 #%s - %s\n", device.Code, device.Status.Text())
-		if device.Customer != nil {
-			message += fmt.Sprintf("👤 %s (%s)\n", device.Customer.Name, device.Customer.Phone)
+		if len(devices) == 0 {
+			sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+				"ru": "📋 У вас пока нет заказов",
+				"uz": "📋 Sizda hozircha buyurtmalar yo'q",
+				"en": "📋 You don't have any orders yet",
+			}, lang))
+			return
 		}
-		message += fmt.Sprintf("📱 %s %s\n", device.Brand, device.Model)
-		
-		if device.DeadlineAt != nil {
-			if device.IsOverdue() {
-				message += fmt.Sprintf("⏰ ❗ПРОСРОЧЕН: %s\n", device.DeadlineAt.Format("02.01.2006"))
-			} else {
-				message += fmt.Sprintf("⏰ До: %s\n", device.DeadlineAt.Format("02.01.2006"))
+
+		// Формируем список заказов
+		messageText := i18n.GetText(map[string]string{
+			"ru": "📋 Ваши заказы:",
+			"uz": "📋 Sizning buyurtmalaringiz:",
+			"en": "📋 Your orders:",
+		}, lang) + "\n\n"
+
+		for i, device := range devices {
+			if i >= 10 { // Ограничиваем количество
+				break
 			}
+			status := getStatusText(device.Status, lang)
+			messageText += fmt.Sprintf("%d. %s %s\n⚡️ %s: %s\n",
+				i+1, device.Brand, device.Model,
+				i18n.GetText(map[string]string{"ru": "Статус", "uz": "Status", "en": "Status"}, lang),
+				status)
+			if device.Price != nil {
+				messageText += fmt.Sprintf("💰 %s: %.2f\n",
+					i18n.GetText(map[string]string{"ru": "Цена", "uz": "Narx", "en": "Price"}, lang),
+					*device.Price)
+			}
+			messageText += "\n"
 		}
-		message += "\n"
-	}
 
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, message)
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, messageText)
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending orders: %v", err)
+		}
+	} else {
+		// Заглушка
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": "📋 Ваши заказы (функция в разработке)",
+			"uz": "Sizning buyurtmalaringiz (funksiya ishlab chiqilmoqda)",
+			"en": "Your orders (function in development)",
+		}, lang))
+	}
+}
+
+// AllOrders показывает все заказы (только для админов)
+func AllOrders(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB, langCache *i18n.LanguageCache) {
+	lang := langCache.Get(update.Message.From.ID)
+
+	if cfg.API.Enabled {
+		apiClient := api.NewAPIClient(cfg.API.BaseURL, cfg.API.APIKey)
+		devices, err := apiClient.GetDevices()
+		if err != nil {
+			log.Printf("Error getting all devices from API: %v", err)
+			sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+				"ru": "❌ Ошибка получения данных",
+				"uz": "❌ Ma'lumotlarni olishda xatolik",
+				"en": "❌ Error getting data",
+			}, lang))
+			return
+		}
+
+		if len(devices) == 0 {
+			sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+				"ru": "📊 Нет заказов в системе",
+				"uz": "📊 Tizimda buyurtmalar yo'q",
+				"en": "📊 No orders in the system",
+			}, lang))
+			return
+		}
+
+		// Статистика по статусам
+		statusCount := make(map[string]int)
+		for _, device := range devices {
+			statusCount[device.Status]++
+		}
+
+		messageText := i18n.GetText(map[string]string{
+			"ru": "📊 Статистика заказов:",
+			"uz": "📊 Buyurtmalar statistikasi:",
+			"en": "📊 Orders statistics:",
+		}, lang) + "\n\n"
+
+		messageText += fmt.Sprintf("%s: %d\n",
+			i18n.GetText(map[string]string{"ru": "Всего", "uz": "Jami", "en": "Total"}, lang),
+			len(devices))
+
+		for status, count := range statusCount {
+			statusText := getStatusText(status, lang)
+			messageText += fmt.Sprintf("%s: %d\n", statusText, count)
+		}
+
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, messageText)
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending all orders: %v", err)
+		}
+	} else {
+		// Заглушка
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": "📊 Все заказы (функция в разработке)",
+			"uz": "Barcha buyurtmalar (funksiya ishlab chiqilmoqda)",
+			"en": "All orders (function in development)",
+		}, lang))
+	}
+}
+
+// NewOrder создает новый заказ (только для админов)
+func NewOrder(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB, langCache *i18n.LanguageCache) {
+	lang := langCache.Get(update.Message.From.ID)
+
+	// Временная заглушка
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "➕ "+i18n.GetText(map[string]string{
+		"ru": "Создание нового заказа (функция в разработке)",
+		"uz": "Yangi buyurtma yaratish (funksiya ishlab chiqilmoqda)",
+		"en": "Creating new order (function in development)",
+	}, lang))
+
 	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Ошибка отправки списка заказов: %v", err)
+		log.Printf("Error sending new order: %v", err)
 	}
 }
 
-func AllOrders(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB) {
-	var user models.User
-	
-	// Проверяем, что пользователь администратор
-	if err := db.Where("telegram_id = ?", update.Message.From.ID).First(&user).Error; err != nil {
-		sendMessage(bot, update.Message.Chat.ID, "❌ Пользователь не найден.")
-		return
-	}
+// Masters управляет мастерами (только для админов)
+func Masters(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB, langCache *i18n.LanguageCache) {
+	lang := langCache.Get(update.Message.From.ID)
 
-	if user.Role != models.UserRoleAdmin {
-		sendMessage(bot, update.Message.Chat.ID, "❌ У вас нет доступа к этой функции.")
-		return
-	}
+	// Временная заглушка
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "👥 "+i18n.GetText(map[string]string{
+		"ru": "Управление мастерами (функция в разработке)",
+		"uz": "Ustalarni boshqarish (funksiya ishlab chiqilmoqda)",
+		"en": "Managing masters (function in development)",
+	}, lang))
 
-	var devices []models.Device
-	if err := db.Preload("Customer").Preload("Master").Find(&devices).Error; err != nil {
-		log.Printf("Ошибка получения всех заказов: %v", err)
-		sendMessage(bot, update.Message.Chat.ID, "❌ Ошибка получения заказов.")
-		return
-	}
-
-	if len(devices) == 0 {
-		sendMessage(bot, update.Message.Chat.ID, "📊 В системе пока нет заказов.")
-		return
-	}
-
-	// Группируем по статусам
-	statusGroups := make(map[models.DeviceStatus][]models.Device)
-	for _, device := range devices {
-		statusGroups[device.Status] = append(statusGroups[device.Status], device)
-	}
-
-	message := fmt.Sprintf("📊 Все заказы в системе (%d):\n\n", len(devices))
-
-	// Показываем статистику по статусам
-	for status, devicesInStatus := range statusGroups {
-		message += fmt.Sprintf("%s: %d\n", status.Text(), len(devicesInStatus))
-	}
-
-	message += "\n📋 Последние 10 заказов:\n\n"
-
-	// Показываем последние 10 заказов
-	for i := len(devices) - 1; i >= 0 && i >= len(devices)-10; i-- {
-		device := devices[i]
-		message += fmt.Sprintf("🔹 #%s - %s\n", device.Code, device.Status.Text())
-		
-		if device.Customer != nil {
-			message += fmt.Sprintf("👤 %s\n", device.Customer.Name)
-		}
-		
-		if device.Master != nil {
-			message += fmt.Sprintf("🔧 %s\n", device.Master.FullName())
-		}
-		
-		message += "\n"
-	}
-
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, message)
 	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Ошибка отправки всех заказов: %v", err)
+		log.Printf("Error sending masters: %v", err)
 	}
 }
 
-func NewOrder(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB) {
-	sendMessage(bot, update.Message.Chat.ID, "➕ Создание нового заказа временно недоступно.\n\nИспользуйте веб-интерфейс для создания заказов.")
-}
+// Analytics показывает аналитику (только для админов)
+func Analytics(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB, langCache *i18n.LanguageCache) {
+	lang := langCache.Get(update.Message.From.ID)
 
-func Masters(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB) {
-	var masters []models.User
-	if err := db.Where("role = ? AND is_active = ?", models.UserRoleMaster, true).Find(&masters).Error; err != nil {
-		log.Printf("Ошибка получения мастеров: %v", err)
-		sendMessage(bot, update.Message.Chat.ID, "❌ Ошибка получения списка мастеров.")
-		return
-	}
+	// Временная заглушка
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "📈 "+i18n.GetText(map[string]string{
+		"ru": "Аналитика (функция в разработке)",
+		"uz": "Analitika (funksiya ishlab chiqilmoqda)",
+		"en": "Analytics (function in development)",
+	}, lang))
 
-	if len(masters) == 0 {
-		sendMessage(bot, update.Message.Chat.ID, "👥 В системе пока нет зарегистрированных мастеров.")
-		return
-	}
-
-	message := fmt.Sprintf("👥 Мастера в системе (%d):\n\n", len(masters))
-
-	for _, master := range masters {
-		var deviceCount int64
-		db.Model(&models.Device{}).Where("master_id = ?", master.ID).Count(&deviceCount)
-
-		message += fmt.Sprintf("🔨 %s\n", master.FullName())
-		if master.Username != nil && *master.Username != "" {
-			message += fmt.Sprintf("@%s\n", *master.Username)
-		}
-		message += fmt.Sprintf("📋 Заказов: %d\n\n", deviceCount)
-	}
-
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, message)
 	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Ошибка отправки списка мастеров: %v", err)
+		log.Printf("Error sending analytics: %v", err)
 	}
 }
 
-func Analytics(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB) {
-	var stats struct {
-		TotalOrders     int64
-		CompletedOrders int64
-		InProgressOrders int64
-		OverdueOrders   int64
-		TotalRevenue    float64
-	}
-
-	// Общее количество заказов
-	db.Model(&models.Device{}).Count(&stats.TotalOrders)
-
-	// Завершенные заказы
-	db.Model(&models.Device{}).Where("status = ?", models.DeviceStatusCompleted).Count(&stats.CompletedOrders)
-
-	// В работе
-	db.Model(&models.Device{}).Where("status IN ?", []models.DeviceStatus{
-		models.DeviceStatusInProgress,
-		models.DeviceStatusWaitingParts,
-	}).Count(&stats.InProgressOrders)
-
-	// Просроченные заказы
-	db.Model(&models.Device{}).Where("deadline_at < NOW() AND status NOT IN ?", []models.DeviceStatus{
-		models.DeviceStatusCompleted,
-		models.DeviceStatusCancelled,
-	}).Count(&stats.OverdueOrders)
-
-	// Общий доход (только с завершенных заказов)
-	db.Model(&models.Device{}).Where("status = ? AND is_paid = ?", models.DeviceStatusCompleted, true).
-		Select("COALESCE(SUM(total_cost), 0)").Row().Scan(&stats.TotalRevenue)
-
-	message := "📈 Аналитика мастерской:\n\n"
-	message += fmt.Sprintf("📊 Всего заказов: %d\n", stats.TotalOrders)
-	message += fmt.Sprintf("✅ Завершено: %d\n", stats.CompletedOrders)
-	message += fmt.Sprintf("⚙️ В работе: %d\n", stats.InProgressOrders)
-	message += fmt.Sprintf("⏰ Просрочено: %d\n", stats.OverdueOrders)
-	message += fmt.Sprintf("💰 Общий доход: %.2f сум\n\n", stats.TotalRevenue)
-
-	// Процент завершенных заказов
-	if stats.TotalOrders > 0 {
-		completionRate := float64(stats.CompletedOrders) / float64(stats.TotalOrders) * 100
-		message += fmt.Sprintf("📈 Процент завершенных: %.1f%%\n", completionRate)
-	}
-
-	sendMessage(bot, update.Message.Chat.ID, message)
+// Заглушки для обработчиков callback
+func handleOrderDetails(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, orderID uint, user interface{}) {
+	// Временная заглушка
+	answerCallback(bot, callback.ID, "Order details - в разработке")
 }
 
-func getOrdersTitle(role models.UserRole) string {
-	if role == models.UserRoleAdmin {
-		return "Все заказы"
+func handleStatusChange(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, orderID uint, status interface{}, user interface{}) {
+	// Временная заглушка
+	answerCallback(bot, callback.ID, "Status change - в разработке")
+}
+
+func handlePriceSet(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, orderID uint, user interface{}) {
+	// Временная заглушка
+	answerCallback(bot, callback.ID, "Price set - в разработке")
+}
+
+func handleBackToOrders(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user interface{}) {
+	// Временная заглушка
+	answerCallback(bot, callback.ID, "Back to orders - в разработке")
+}
+
+// getStatusText возвращает перевод статуса на указанный язык
+func getStatusText(status string, lang string) string {
+	statusMap := map[string]map[string]string{
+		"received": {
+			"ru": "🆕 Принят",
+			"uz": "🆕 Qabul qilindi",
+			"en": "🆕 Received",
+		},
+		"in_progress": {
+			"ru": "🔧 В работе",
+			"uz": "🔧 Ishlanmoqda",
+			"en": "🔧 In progress",
+		},
+		"waiting_parts": {
+			"ru": "⏳ Ожидание запчастей",
+			"uz": "⏳ Ehtiyot qismlar kutilmoqda",
+			"en": "⏳ Waiting for parts",
+		},
+		"ready": {
+			"ru": "✅ Готов",
+			"uz": "✅ Tayyor",
+			"en": "✅ Ready",
+		},
+		"completed": {
+			"ru": "📦 Выдан",
+			"uz": "📦 Berildi",
+			"en": "📦 Completed",
+		},
+		"cancelled": {
+			"ru": "❌ Отменен",
+			"uz": "❌ Bekor qilindi",
+			"en": "❌ Cancelled",
+		},
 	}
-	return "Мои заказы"
+
+	if statusTexts, exists := statusMap[status]; exists {
+		if text, exists := statusTexts[lang]; exists {
+			return text
+		}
+		return statusTexts["ru"] // fallback
+	}
+	return status // fallback
 }

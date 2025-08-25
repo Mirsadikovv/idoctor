@@ -1,35 +1,42 @@
 package handlers
 
 import (
+	"idoctor-bot/app/i18n"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func getMainKeyboard(isAdmin bool) tgbotapi.ReplyKeyboardMarkup {
+func getMainKeyboard(isAdmin bool, lang string) tgbotapi.ReplyKeyboardMarkup {
 	var buttons [][]tgbotapi.KeyboardButton
 
 	if isAdmin {
 		// Клавиатура для админа
 		buttons = [][]tgbotapi.KeyboardButton{
 			{
-				tgbotapi.NewKeyboardButton("📊 Все заказы"),
-				tgbotapi.NewKeyboardButton("➕ Новый заказ"),
+				tgbotapi.NewKeyboardButton(i18n.GetButton("all_orders", lang)),
+				tgbotapi.NewKeyboardButton(i18n.GetButton("new_order", lang)),
 			},
 			{
-				tgbotapi.NewKeyboardButton("👥 Мастера"),
-				tgbotapi.NewKeyboardButton("📈 Аналитика"),
+				tgbotapi.NewKeyboardButton(i18n.GetButton("masters", lang)),
+				tgbotapi.NewKeyboardButton(i18n.GetButton("analytics", lang)),
 			},
 			{
-				tgbotapi.NewKeyboardButton("🔧 Меню"),
+				tgbotapi.NewKeyboardButton(i18n.GetButton("menu", lang)),
+			},
+			{
+				tgbotapi.NewKeyboardButton(i18n.GetButton("change_language", lang)),
 			},
 		}
 	} else {
 		// Клавиатура для мастера
 		buttons = [][]tgbotapi.KeyboardButton{
 			{
-				tgbotapi.NewKeyboardButton("📋 Мои заказы"),
+				tgbotapi.NewKeyboardButton(i18n.GetButton("my_orders", lang)),
 			},
 			{
-				tgbotapi.NewKeyboardButton("🔧 Меню"),
+				tgbotapi.NewKeyboardButton(i18n.GetButton("menu", lang)),
+			},
+			{
+				tgbotapi.NewKeyboardButton(i18n.GetButton("change_language", lang)),
 			},
 		}
 	}

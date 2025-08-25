@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"idoctor-bot/app/config"
+	"idoctor-bot/app/i18n"
 	"idoctor-bot/app/models"
 	"idoctor-bot/app/utils"
 
@@ -12,13 +13,24 @@ import (
 	"gorm.io/gorm"
 )
 
-func Start(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB) {
+func Start(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB, langCache *i18n.LanguageCache) {
 	var user models.User
 	
 	// Проверяем существует ли пользователь
 	result := db.Where("telegram_id = ?", update.Message.From.ID).First(&user)
 	
 	if result.Error == gorm.ErrRecordNotFound {
+		// Определяем язык по умолчанию
+		lang := "ru"
+		if update.Message.From.LanguageCode != "" {
+			switch update.Message.From.LanguageCode {
+			case "uz":
+				lang = "uz"
+			case "en":
+				lang = "en"
+			}
+		}
+
 		// Создаем нового пользователя
 		user = models.User{
 			TelegramID: update.Message.From.ID,
@@ -27,6 +39,7 @@ func Start(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db 
 			FirstName:  &update.Message.From.FirstName,
 			LastName:   &update.Message.From.LastName,
 			Role:       models.UserRoleMaster, // По умолчанию мастер
+			Language:   lang,
 			IsActive:   true,
 		}
 
@@ -37,7 +50,7 @@ func Start(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db 
 
 		if err := db.Create(&user).Error; err != nil {
 			log.Printf("Ошибка создания пользователя: %v", err)
-			sendMessage(bot, update.Message.Chat.ID, "❌ Ошибка регистрации. Попробуйте позже.")
+			sendMessage(bot, update.Message.Chat.ID, i18n.GetText(i18n.RegistrationError, lang))
 			return
 		}
 
@@ -46,24 +59,26 @@ func Start(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db 
 			notifyAdminsNewUser(bot, cfg, &user)
 		}
 
-		sendMessage(bot, update.Message.Chat.ID, "✅ Вы успешно зарегистрированы!")
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(i18n.RegistrationSuccess, user.GetLanguage()))
 	}
+
+	// Обновляем кэш языка
+	langCache.Set(update.Message.From.ID, user.GetLanguage())
 
 	// Отправляем приветственное сообщение и меню
-	welcomeMessage := "🔧 Добро пожаловать в систему ремонтной мастерской!\n\n"
+	lang := user.GetLanguage()
+	welcomeMessage := i18n.GetText(i18n.WelcomeMessage, lang) + "\n\n"
 	
 	if user.Role == models.UserRoleAdmin {
-		welcomeMessage += "👑 Вы вошли как администратор\n"
-		welcomeMessage += "У вас есть полный доступ к системе.\n\n"
+		welcomeMessage += i18n.GetText(i18n.AdminWelcome, lang) + "\n\n"
 	} else {
-		welcomeMessage += "🔨 Вы вошли как мастер\n"
-		welcomeMessage += "Вы можете просматривать и управлять своими заказами.\n\n"
+		welcomeMessage += i18n.GetText(i18n.MasterWelcome, lang) + "\n\n"
 	}
 
-	welcomeMessage += "Используйте меню ниже для навигации:"
+	welcomeMessage += i18n.GetText(i18n.UseMenuBelow, lang)
 
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, welcomeMessage)
-	msg.ReplyMarkup = getMainKeyboard(user.Role == models.UserRoleAdmin)
+	msg.ReplyMarkup = getMainKeyboard(user.Role == models.UserRoleAdmin, lang)
 
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Ошибка отправки сообщения: %v", err)
@@ -71,13 +86,14 @@ func Start(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db 
 }
 
 func notifyAdminsNewUser(bot *tgbotapi.BotAPI, cfg *config.Config, user *models.User) {
-	message := "👤 Новый пользователь зарегистрировался:\n\n"
-	message += "• Имя: " + user.FullName() + "\n"
+	// Для уведомлений админов используем русский язык
+	message := i18n.GetText(i18n.NewUserRegistered, "ru") + "\n\n"
+	message += i18n.GetText(i18n.Name, "ru") + " " + user.FullName() + "\n"
 	if user.Username != nil && *user.Username != "" {
-		message += "• Username: @" + *user.Username + "\n"
+		message += i18n.GetText(i18n.Username, "ru") + " @" + *user.Username + "\n"
 	}
-	message += "• Telegram ID: " + strconv.FormatInt(user.TelegramID, 10) + "\n"
-	message += "• Роль: " + string(user.Role)
+	message += i18n.GetText(i18n.TelegramID, "ru") + " " + strconv.FormatInt(user.TelegramID, 10) + "\n"
+	message += i18n.GetText(i18n.Role, "ru") + " " + string(user.Role)
 
 	for _, idStr := range cfg.Bot.AdminIds {
 		if idStr == "" {

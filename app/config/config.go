@@ -13,6 +13,7 @@ import (
 type Config struct {
 	Database DatabaseConfig
 	Bot      BotConfig
+	API      APIConfig
 }
 
 type DatabaseConfig struct {
@@ -39,6 +40,12 @@ type BotConfig struct {
 	Timeout  int
 }
 
+type APIConfig struct {
+	BaseURL string
+	APIKey  string
+	Enabled bool
+}
+
 func Load() (*Config, error) {
 	_ = godotenv.Load(".env")
 
@@ -52,6 +59,7 @@ func Load() (*Config, error) {
 	maxOpenConns, _ := strconv.Atoi(getEnv("DB_MAX_OPEN_CONNECTIONS", "25"))
 	maxIdleConns, _ := strconv.Atoi(getEnv("DB_MAX_IDLE_CONNECTIONS", "25"))
 	timeout, _ := strconv.Atoi(getEnv("TELEGRAM_TIMEOUT", "60"))
+	apiEnabled := getEnv("API_ENABLED", "false") == "true"
 
 	return &Config{
 		Database: DatabaseConfig{
@@ -70,6 +78,11 @@ func Load() (*Config, error) {
 			Debug:    getEnv("TELEGRAM_DEBUG", "false") == "true",
 			AdminIds: admins,
 			Timeout:  timeout,
+		},
+		API: APIConfig{
+			BaseURL: getEnv("API_BASE_URL", "http://localhost:8080"),
+			APIKey:  getEnv("API_KEY", ""),
+			Enabled: apiEnabled,
 		},
 	}, nil
 }

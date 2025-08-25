@@ -29,6 +29,7 @@ type User struct {
 	FirstName  *string        `json:"first_name"`
 	LastName   *string        `json:"last_name"`
 	Role       UserRole       `json:"role" gorm:"type:varchar(20);not null"`
+	Language   string         `json:"language" gorm:"size:5;default:'ru'"`
 	IsActive   bool           `json:"is_active" gorm:"default:true"`
 	CreatedAt  time.Time      `json:"created_at"`
 	UpdatedAt  time.Time      `json:"updated_at"`
@@ -68,4 +69,19 @@ func (u *User) FullName() string {
 
 func (u *User) TableName() string {
 	return "users"
+}
+
+func (u *User) GetLanguage() string {
+	if u.Language == "" {
+		return "ru"
+	}
+	return u.Language
+}
+
+func (u *User) SetLanguage(lang string) {
+	u.Language = lang
+}
+
+func (u *User) IsValidLanguage(lang string) bool {
+	return lang == "ru" || lang == "uz" || lang == "en"
 }
