@@ -227,6 +227,48 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 			// Обработка навигации по шагам создания заказа
 			handleOrderNavigation(bot, callback, cfg, db, parts[1], &user)
 		}
+	case "stats":
+		handleStatisticsCallback(bot, callback, cfg, db, parts, &user)
+	case "back_to_stats":
+		handleBackToStatistics(bot, callback, cfg, db, &user)
+	case "masters":
+		handleMastersCallback(bot, callback, cfg, db, parts, &user)
+	case "master_action":
+		handleMasterCallback(bot, callback, cfg, db, parts, &user)
+	case "assign":
+		handleAssignCallback(bot, callback, cfg, db, parts, &user)
+	case "back_to_masters":
+		handleBackToMasters(bot, callback, cfg, db, &user)
+	case "main_menu":
+		handleMainMenuCallback(bot, callback, cfg, db, &user)
+	case "all_orders":
+		if utils.IsAdmin(callback.From.ID, cfg) {
+			handleAllOrdersCallback(bot, callback, cfg, db, &user)
+		} else {
+			answerCallback(bot, callback.ID, i18n.GetText(i18n.NoAccess, lang))
+		}
+	case "new_order":
+		if utils.IsAdmin(callback.From.ID, cfg) {
+			handleNewOrderCallback(bot, callback, cfg, db, &user)
+		} else {
+			answerCallback(bot, callback.ID, i18n.GetText(i18n.NoAccess, lang))
+		}
+	case "my_orders":
+		handleMyOrdersCallback(bot, callback, cfg, db, &user)
+	case "main_masters":
+		if utils.IsAdmin(callback.From.ID, cfg) {
+			handleMastersMenuCallback(bot, callback, cfg, db, &user)
+		} else {
+			answerCallback(bot, callback.ID, i18n.GetText(i18n.NoAccess, lang))
+		}
+	case "analytics":
+		if utils.IsAdmin(callback.From.ID, cfg) {
+			handleAnalyticsCallback(bot, callback, cfg, db, &user)
+		} else {
+			answerCallback(bot, callback.ID, i18n.GetText(i18n.NoAccess, lang))
+		}
+	case "search":
+		handleSearchCallback(bot, callback, cfg, db, &user)
 	default:
 		answerCallback(bot, callback.ID, i18n.GetText(i18n.UnknownAction, lang))
 	}
@@ -268,6 +310,8 @@ func handleUserState(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.C
 		return handleDeviceModelInput(bot, update, db, stateService, user, inputText, lang)
 	case models.StateWaitingDeviceIssue:
 		return handleDeviceIssueInput(bot, update, db, stateService, user, inputText, lang)
+	case models.StateWaitingMasterTelegramID:
+		return handleMasterTelegramIDInput(bot, update, db, stateService, user, inputText, lang)
 	case models.StateSettingPrice:
 		return handlePriceInput(bot, update, db, stateService, user, inputText, lang)
 	default:
@@ -866,4 +910,828 @@ func handleTextSearch(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.
 			"uz": "🔍 Qidiryapman: %s\n\n⚠️ Qidiruv hali ishlab chiqilmoqda",
 			"en": "🔍 Searching: %s\n\n⚠️ Search is under development",
 		}, lang), query))
+}
+
+// handleStatisticsCallback обрабатывает callback'и статистики
+func handleStatisticsCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, parts []string, user *models.User) {
+	lang := user.GetLanguage()
+	
+	if len(parts) < 2 {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Неверный формат данных",
+			"uz": "Noto'g'ri ma'lumot formati",
+			"en": "Invalid data format",
+		}, lang))
+		return
+	}
+	
+	action := parts[1]
+	
+	switch action {
+	case "general":
+		showGeneralStatistics(bot, callback, db, user)
+	case "masters":
+		showMasterStatistics(bot, callback, db, user)
+	case "period":
+		if len(parts) >= 3 {
+			period := models.StatisticsPeriod(parts[2])
+			showPeriodStatistics(bot, callback, db, user, period)
+		}
+	case "refresh":
+		// Повторно показываем главное меню статистики
+		showStatisticsMainMenu(bot, callback, user)
+	default:
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Неизвестное действие",
+			"uz": "Noma'lum harakat",
+			"en": "Unknown action",
+		}, lang))
+	}
+}
+
+// showStatisticsMainMenu показывает главное меню статистики
+func showStatisticsMainMenu(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, user *models.User) {
+	lang := user.GetLanguage()
+	
+	messageText := "📊 " + i18n.GetText(map[string]string{
+		"ru": "Статистика и аналитика",
+		"uz": "Statistika va analitika", 
+		"en": "Statistics and analytics",
+	}, lang) + "\n\n" + i18n.GetText(map[string]string{
+		"ru": "Выберите тип статистики или период для просмотра:",
+		"uz": "Statistika turini yoki ko'rish uchun davrni tanlang:",
+		"en": "Choose statistics type or period to view:",
+	}, lang)
+	
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, getStatisticsMainKeyboard(lang))
+	
+	if _, err := bot.Send(editMsg); err != nil {
+		log.Printf("Error editing statistics menu text: %v", err)
+	}
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing statistics menu markup: %v", err)
+	}
+	
+	answerCallback(bot, callback.ID, "")
+}
+
+// showGeneralStatistics показывает общую статистику
+func showGeneralStatistics(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, db *gorm.DB, user *models.User) {
+	lang := user.GetLanguage()
+	statsService := services.NewStatisticsService(db)
+	
+	stats, err := statsService.GetOverallStatistics()
+	if err != nil {
+		log.Printf("Error getting general statistics: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Ошибка получения статистики",
+			"uz": "Statistika olishda xatolik",
+			"en": "Error getting statistics",
+		}, lang))
+		return
+	}
+	
+	messageText := formatGeneralStatistics(stats, lang)
+	
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, getStatisticsBackKeyboard(lang))
+	
+	if _, err := bot.Send(editMsg); err != nil {
+		log.Printf("Error editing general statistics: %v", err)
+	}
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing general statistics markup: %v", err)
+	}
+	
+	answerCallback(bot, callback.ID, "")
+}
+
+// showMasterStatistics показывает статистику по мастерам
+func showMasterStatistics(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, db *gorm.DB, user *models.User) {
+	lang := user.GetLanguage()
+	statsService := services.NewStatisticsService(db)
+	
+	masterStats, err := statsService.GetMasterStatistics(models.PeriodAllTime)
+	if err != nil {
+		log.Printf("Error getting master statistics: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Ошибка получения статистики мастеров",
+			"uz": "Ustalar statistikasini olishda xatolik",
+			"en": "Error getting master statistics",
+		}, lang))
+		return
+	}
+	
+	messageText := statsService.FormatMasterStatistics(masterStats, lang)
+	if messageText == "👨‍🔧 **Статистика мастеров:**\n\n" {
+		messageText = i18n.GetText(map[string]string{
+			"ru": "👨‍🔧 Статистика мастеров\n\nПока нет данных для отображения",
+			"uz": "👨‍🔧 Ustalar statistikasi\n\nKo'rsatish uchun ma'lumotlar yo'q",
+			"en": "👨‍🔧 Master statistics\n\nNo data to display yet",
+		}, lang)
+	}
+	
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, getStatisticsBackKeyboard(lang))
+	
+	if _, err := bot.Send(editMsg); err != nil {
+		log.Printf("Error editing master statistics: %v", err)
+	}
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing master statistics markup: %v", err)
+	}
+	
+	answerCallback(bot, callback.ID, "")
+}
+
+// showPeriodStatistics показывает статистику за период
+func showPeriodStatistics(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, db *gorm.DB, user *models.User, period models.StatisticsPeriod) {
+	lang := user.GetLanguage()
+	statsService := services.NewStatisticsService(db)
+	
+	stats, err := statsService.GetPeriodStatistics(period)
+	if err != nil {
+		log.Printf("Error getting period statistics: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Ошибка получения статистики",
+			"uz": "Statistika olishda xatolik", 
+			"en": "Error getting statistics",
+		}, lang))
+		return
+	}
+	
+	messageText := statsService.FormatStatistics(stats, lang)
+	
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, getStatisticsBackKeyboard(lang))
+	
+	if _, err := bot.Send(editMsg); err != nil {
+		log.Printf("Error editing period statistics: %v", err)
+	}
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing period statistics markup: %v", err)
+	}
+	
+	answerCallback(bot, callback.ID, "")
+}
+
+// handleBackToStatistics возвращает к главному меню статистики
+func handleBackToStatistics(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	showStatisticsMainMenu(bot, callback, user)
+}
+
+// handleMainMenuCallback обрабатывает возврат в главное меню
+func handleMainMenuCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	lang := user.GetLanguage()
+	
+	// Редактируем текущее сообщение на главное меню с inline клавиатурой
+	messageText := i18n.GetText(map[string]string{
+		"ru": "🏠 Главное меню\n\nВыберите действие:",
+		"uz": "🏠 Asosiy menyu\n\nAmalni tanlang:",
+		"en": "🏠 Main menu\n\nChoose an action:",
+	}, lang)
+	
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	keyboard := getMainInlineKeyboard(user.Role == models.UserRoleAdmin, lang)
+	editMsg.ReplyMarkup = &keyboard
+	
+	if _, err := bot.Send(editMsg); err != nil {
+		log.Printf("Error editing main menu: %v", err)
+	}
+	
+	// Отвечаем на callback
+	answerCallback(bot, callback.ID, "")
+}
+
+// Callback-обработчики для кнопок главного меню
+
+func handleAllOrdersCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	// Создаем фейковый update для совместимости с существующей функцией
+	update := tgbotapi.Update{
+		CallbackQuery: callback,
+	}
+	// Создаем фейковый Message
+	update.Message = &tgbotapi.Message{
+		Chat: &tgbotapi.Chat{ID: callback.Message.Chat.ID},
+		From: callback.From,
+	}
+	
+	langCache := i18n.NewLanguageCache()
+	langCache.Set(callback.From.ID, user.GetLanguage())
+	AllOrders(bot, update, cfg, db, langCache)
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleMyOrdersCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	update := tgbotapi.Update{
+		CallbackQuery: callback,
+	}
+	update.Message = &tgbotapi.Message{
+		Chat: &tgbotapi.Chat{ID: callback.Message.Chat.ID},
+		From: callback.From,
+	}
+	
+	langCache := i18n.NewLanguageCache()
+	langCache.Set(callback.From.ID, user.GetLanguage())
+	MyOrders(bot, update, cfg, db, langCache)
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleNewOrderCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	lang := user.GetLanguage()
+	// Отправляем сообщение о создании нового заказа
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, i18n.GetText(map[string]string{
+		"ru": "📋 Для создания нового заказа используйте команду /new_order или напишите 'Новый заказ'",
+		"uz": "📋 Yangi buyurtma yaratish uchun /new_order buyrug'ini yoki 'Yangi buyurtma' deb yozing",
+		"en": "📋 To create a new order, use the /new_order command or write 'New order'",
+	}, lang))
+	
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending new order message: %v", err)
+	}
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleMastersMenuCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	update := tgbotapi.Update{
+		CallbackQuery: callback,
+	}
+	update.Message = &tgbotapi.Message{
+		Chat: &tgbotapi.Chat{ID: callback.Message.Chat.ID},
+		From: callback.From,
+	}
+	
+	langCache := i18n.NewLanguageCache()
+	langCache.Set(callback.From.ID, user.GetLanguage())
+	Masters(bot, update, cfg, db, langCache)
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleAnalyticsCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	update := tgbotapi.Update{
+		CallbackQuery: callback,
+	}
+	update.Message = &tgbotapi.Message{
+		Chat: &tgbotapi.Chat{ID: callback.Message.Chat.ID},
+		From: callback.From,
+	}
+	
+	langCache := i18n.NewLanguageCache()
+	langCache.Set(callback.From.ID, user.GetLanguage())
+	Analytics(bot, update, cfg, db, langCache)
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleSearchCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	lang := user.GetLanguage()
+	// Отправляем сообщение о поиске
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, i18n.GetText(map[string]string{
+		"ru": "🔍 Для поиска используйте команду /search или напишите 'Поиск'",
+		"uz": "🔍 Qidirish uchun /search buyrug'ini yoki 'Qidirish' deb yozing",
+		"en": "🔍 To search, use the /search command or write 'Search'",
+	}, lang))
+	
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending search message: %v", err)
+	}
+	answerCallback(bot, callback.ID, "")
+}
+
+// formatGeneralStatistics форматирует общую статистику для отображения
+func formatGeneralStatistics(stats *models.OrderStatistics, lang string) string {
+	var result strings.Builder
+	
+	result.WriteString("📊 " + i18n.GetText(map[string]string{
+		"ru": "Общая статистика",
+		"uz": "Umumiy statistika",
+		"en": "General statistics",
+	}, lang) + "\n\n")
+	
+	result.WriteString("📈 " + i18n.GetText(map[string]string{
+		"ru": "Основные показатели:",
+		"uz": "Asosiy ko'rsatkichlar:",
+		"en": "Main indicators:",
+	}, lang) + "\n")
+	
+	result.WriteString(fmt.Sprintf("• %s: %d\n", 
+		i18n.GetText(map[string]string{
+			"ru": "Всего заказов",
+			"uz": "Jami buyurtmalar",
+			"en": "Total orders",
+		}, lang), stats.TotalOrders))
+	
+	result.WriteString(fmt.Sprintf("• %s: %.2f сум\n", 
+		i18n.GetText(map[string]string{
+			"ru": "Общая выручка",
+			"uz": "Umumiy daromad",
+			"en": "Total revenue",
+		}, lang), stats.TotalRevenue))
+	
+	if stats.AverageRepairTime > 0 {
+		result.WriteString(fmt.Sprintf("• %s: %.1f дней\n", 
+			i18n.GetText(map[string]string{
+				"ru": "Среднее время ремонта",
+				"uz": "O'rtacha ta'mirlash vaqti",
+				"en": "Average repair time",
+			}, lang), stats.AverageRepairTime))
+	}
+	result.WriteString("\n")
+	
+	// Статистика по статусам
+	if len(stats.OrdersByStatus) > 0 {
+		result.WriteString("🔄 " + i18n.GetText(map[string]string{
+			"ru": "По статусам:",
+			"uz": "Statuslar bo'yicha:",
+			"en": "By status:",
+		}, lang) + "\n")
+		
+		for status, count := range stats.OrdersByStatus {
+			result.WriteString(fmt.Sprintf("• %s: %d\n", status.Text(), count))
+		}
+		result.WriteString("\n")
+	}
+	
+	// Топ брендов
+	if len(stats.TopBrands) > 0 {
+		result.WriteString("🏷️ " + i18n.GetText(map[string]string{
+			"ru": "Популярные бренды:",
+			"uz": "Mashur brendlar:",
+			"en": "Popular brands:",
+		}, lang) + "\n")
+		
+		for brand, count := range stats.TopBrands {
+			result.WriteString(fmt.Sprintf("• %s: %d\n", brand, count))
+		}
+	}
+	
+	return result.String()
+}
+
+// handleMastersCallback обрабатывает callback'и управления мастерами
+func handleMastersCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, parts []string, user *models.User) {
+	lang := user.GetLanguage()
+	
+	if len(parts) < 2 {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Неверный формат данных",
+			"uz": "Noto'g'ri ma'lumot formati",
+			"en": "Invalid data format",
+		}, lang))
+		return
+	}
+	
+	masterService := services.NewMasterService(db)
+	action := parts[1]
+	
+	switch action {
+	case "list":
+		if len(parts) >= 3 && parts[2] == "all" {
+			showMastersList(bot, callback, masterService, user, false)
+		} else if len(parts) >= 3 && parts[2] == "active" {
+			showMastersList(bot, callback, masterService, user, true)
+		}
+	case "add":
+		showAddMasterForm(bot, callback, user, db)
+	case "refresh":
+		showMastersMainMenu(bot, callback, user)
+	default:
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Неизвестное действие",
+			"uz": "Noma'lum harakat",
+			"en": "Unknown action",
+		}, lang))
+	}
+}
+
+// handleMasterCallback обрабатывает callback'и конкретного мастера
+func handleMasterCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, parts []string, user *models.User) {
+	lang := user.GetLanguage()
+	
+	if len(parts) < 3 {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Неверный формат данных",
+			"uz": "Noto'g'ri ma'lumot formati",
+			"en": "Invalid data format",
+		}, lang))
+		return
+	}
+	
+	masterService := services.NewMasterService(db)
+	action := parts[1]
+	
+	switch action {
+	case "profile":
+		if len(parts) >= 3 {
+			masterID, err := strconv.ParseUint(parts[2], 10, 32)
+			if err != nil {
+				answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+					"ru": "Неверный ID мастера",
+					"uz": "Noto'g'ri usta ID",
+					"en": "Invalid master ID",
+				}, lang))
+				return
+			}
+			showMasterProfile(bot, callback, masterService, user, uint(masterID))
+		}
+	case "toggle":
+		if len(parts) >= 3 {
+			masterID, err := strconv.ParseUint(parts[2], 10, 32)
+			if err != nil {
+				answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+					"ru": "Неверный ID мастера",
+					"uz": "Noto'g'ri usta ID",
+					"en": "Invalid master ID",
+				}, lang))
+				return
+			}
+			toggleMasterStatus(bot, callback, masterService, user, uint(masterID))
+		}
+	case "refresh":
+		if len(parts) >= 3 {
+			masterID, err := strconv.ParseUint(parts[2], 10, 32)
+			if err != nil {
+				answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+					"ru": "Неверный ID мастера",
+					"uz": "Noto'g'ri usta ID",
+					"en": "Invalid master ID",
+				}, lang))
+				return
+			}
+			showMasterProfile(bot, callback, masterService, user, uint(masterID))
+		}
+	default:
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Неизвестное действие",
+			"uz": "Noma'lum harakat",
+			"en": "Unknown action",
+		}, lang))
+	}
+}
+
+// handleAssignCallback обрабатывает назначение мастера на заказ
+func handleAssignCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, parts []string, user *models.User) {
+	lang := user.GetLanguage()
+	
+	if len(parts) < 4 || parts[1] != "master" {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Неверный формат данных",
+			"uz": "Noto'g'ri ma'lumot formati",
+			"en": "Invalid data format",
+		}, lang))
+		return
+	}
+	
+	deviceID, err := strconv.ParseUint(parts[2], 10, 32)
+	if err != nil {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Неверный ID заказа",
+			"uz": "Noto'g'ri buyurtma ID",
+			"en": "Invalid order ID",
+		}, lang))
+		return
+	}
+	
+	masterID, err := strconv.ParseUint(parts[3], 10, 32)
+	if err != nil {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Неверный ID мастера",
+			"uz": "Noto'g'ri usta ID",
+			"en": "Invalid master ID",
+		}, lang))
+		return
+	}
+	
+	masterService := services.NewMasterService(db)
+	err = masterService.AssignMasterToDevice(uint(deviceID), uint(masterID))
+	if err != nil {
+		log.Printf("Error assigning master to device: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Ошибка назначения мастера",
+			"uz": "Usta tayinlashda xatolik",
+			"en": "Error assigning master",
+		}, lang))
+		return
+	}
+	
+	// Получаем информацию о мастере для уведомления
+	master, err := masterService.GetMasterByID(uint(masterID))
+	if err != nil {
+		log.Printf("Error getting master info: %v", err)
+	}
+	
+	successText := i18n.GetText(map[string]string{
+		"ru": "✅ Мастер назначен на заказ",
+		"uz": "✅ Usta buyurtmaga tayinlandi",
+		"en": "✅ Master assigned to order",
+	}, lang)
+	
+	if master != nil {
+		successText = fmt.Sprintf(i18n.GetText(map[string]string{
+			"ru": "✅ Мастер %s назначен на заказ",
+			"uz": "✅ Usta %s buyurtmaga tayinlandi",
+			"en": "✅ Master %s assigned to order",
+		}, lang), master.FullName())
+	}
+	
+	answerCallback(bot, callback.ID, successText)
+	
+	// Обновляем сообщение с заказом (возвращаемся к списку заказов)
+	// TODO: Здесь можно добавить обновление конкретного заказа
+}
+
+// showMastersMainMenu показывает главное меню управления мастерами
+func showMastersMainMenu(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, user *models.User) {
+	lang := user.GetLanguage()
+	
+	messageText := "👥 " + i18n.GetText(map[string]string{
+		"ru": "Управление мастерами",
+		"uz": "Ustalarni boshqarish",
+		"en": "Masters management",
+	}, lang) + "\n\n" + i18n.GetText(map[string]string{
+		"ru": "Выберите действие для управления мастерами:",
+		"uz": "Ustalarni boshqarish uchun amalni tanlang:",
+		"en": "Choose an action for masters management:",
+	}, lang)
+	
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, getMastersMainKeyboard(lang))
+	
+	if _, err := bot.Send(editMsg); err != nil {
+		log.Printf("Error editing masters menu text: %v", err)
+	}
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing masters menu markup: %v", err)
+	}
+	
+	answerCallback(bot, callback.ID, "")
+}
+
+// showMastersList показывает список мастеров
+func showMastersList(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, masterService *services.MasterService, user *models.User, activeOnly bool) {
+	lang := user.GetLanguage()
+	
+	var masters []models.User
+	var err error
+	
+	if activeOnly {
+		masters, err = masterService.GetActiveMasters()
+	} else {
+		masters, err = masterService.GetAllMasters()
+	}
+	
+	if err != nil {
+		log.Printf("Error getting masters list: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Ошибка получения списка мастеров",
+			"uz": "Ustalar ro'yxatini olishda xatolik",
+			"en": "Error getting masters list",
+		}, lang))
+		return
+	}
+	
+	messageText := masterService.FormatMastersList(masters, lang)
+	
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, getMasterListKeyboard(masters, lang))
+	
+	if _, err := bot.Send(editMsg); err != nil {
+		log.Printf("Error editing masters list: %v", err)
+	}
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing masters list markup: %v", err)
+	}
+	
+	answerCallback(bot, callback.ID, "")
+}
+
+// showMasterProfile показывает профиль мастера
+func showMasterProfile(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, masterService *services.MasterService, user *models.User, masterID uint) {
+	lang := user.GetLanguage()
+	
+	info, err := masterService.GetMasterWithStats(masterID)
+	if err != nil {
+		log.Printf("Error getting master profile: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Ошибка получения профиля мастера",
+			"uz": "Usta profilini olishda xatolik",
+			"en": "Error getting master profile",
+		}, lang))
+		return
+	}
+	
+	messageText := masterService.FormatMasterProfile(info, lang)
+	
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, getMasterProfileKeyboard(masterID, info.User.IsActive, lang))
+	
+	if _, err := bot.Send(editMsg); err != nil {
+		log.Printf("Error editing master profile: %v", err)
+	}
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing master profile markup: %v", err)
+	}
+	
+	answerCallback(bot, callback.ID, "")
+}
+
+// toggleMasterStatus переключает статус активности мастера
+func toggleMasterStatus(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, masterService *services.MasterService, user *models.User, masterID uint) {
+	lang := user.GetLanguage()
+	
+	err := masterService.ToggleMasterStatus(masterID)
+	if err != nil {
+		log.Printf("Error toggling master status: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Ошибка изменения статуса мастера",
+			"uz": "Usta holatini o'zgartirishda xatolik",
+			"en": "Error changing master status",
+		}, lang))
+		return
+	}
+	
+	answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+		"ru": "✅ Статус мастера изменен",
+		"uz": "✅ Usta holati o'zgartirildi",
+		"en": "✅ Master status changed",
+	}, lang))
+	
+	// Обновляем профиль мастера
+	showMasterProfile(bot, callback, masterService, user, masterID)
+}
+
+// handleBackToMasters возвращает к главному меню мастеров
+func handleBackToMasters(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	showMastersMainMenu(bot, callback, user)
+}
+
+// showAddMasterForm показывает форму добавления мастера
+func showAddMasterForm(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, user *models.User, db *gorm.DB) {
+	lang := user.GetLanguage()
+	stateService := services.NewStateService(db)
+	
+	// Устанавливаем состояние ожидания Telegram ID
+	stateService.SetState(user.TelegramID, models.StateWaitingMasterTelegramID, nil)
+	
+	messageText := i18n.GetText(map[string]string{
+		"ru": "➕ Добавление нового мастера\n\nВведите Telegram ID пользователя, которого хотите сделать мастером:\n\nПример: 123456789\n\nℹ️ Пользователь должен сначала написать боту /start",
+		"uz": "➕ Yangi usta qo'shish\n\nUsta qilmoqchi bo'lgan foydalanuvchining Telegram ID raqamini kiriting:\n\nMisol: 123456789\n\nℹ️ Foydalanuvchi avval botga /start yozgan bo'lishi kerak",
+		"en": "➕ Adding new master\n\nEnter the Telegram ID of the user you want to make a master:\n\nExample: 123456789\n\nℹ️ The user must first write /start to the bot",
+	}, lang)
+	
+	// Кнопка отмены
+	cancelButton := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(
+				i18n.GetText(map[string]string{
+					"ru": "❌ Отмена",
+					"uz": "❌ Bekor qilish",
+					"en": "❌ Cancel",
+				}, lang),
+				"back_to_masters"),
+		),
+	)
+	
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, cancelButton)
+	
+	if _, err := bot.Send(editMsg); err != nil {
+		log.Printf("Error editing add master form text: %v", err)
+	}
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing add master form markup: %v", err)
+	}
+	
+	answerCallback(bot, callback.ID, "")
+}
+
+// handleMasterTelegramIDInput обрабатывает ввод Telegram ID для добавления мастера
+func handleMasterTelegramIDInput(bot *tgbotapi.BotAPI, update tgbotapi.Update, db *gorm.DB, stateService *services.StateService, user *models.User, inputText, lang string) bool {
+	// Проверяем, что введено число
+	telegramID, err := strconv.ParseInt(inputText, 10, 64)
+	if err != nil || telegramID <= 0 {
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Неверный формат Telegram ID. Введите числовой ID.\n\nПример: 123456789",
+			"uz": "❌ Telegram ID formati noto'g'ri. Raqamli ID kiriting.\n\nMisol: 123456789",
+			"en": "❌ Invalid Telegram ID format. Enter numeric ID.\n\nExample: 123456789",
+		}, lang))
+		return true
+	}
+	
+	// Проверяем, существует ли пользователь
+	var targetUser models.User
+	result := db.Where("telegram_id = ?", telegramID).First(&targetUser)
+	
+	if result.Error == gorm.ErrRecordNotFound {
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Пользователь с таким Telegram ID не найден.\n\nПользователь должен сначала написать боту /start",
+			"uz": "❌ Bunday Telegram ID li foydalanuvchi topilmadi.\n\nFoydalanuvchi avval botga /start yozgan bo'lishi kerak",
+			"en": "❌ User with this Telegram ID not found.\n\nThe user must first write /start to the bot",
+		}, lang))
+		return true
+	}
+	
+	if result.Error != nil {
+		log.Printf("Error finding user: %v", result.Error)
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Ошибка при поиске пользователя",
+			"uz": "❌ Foydalanuvchini qidirishda xatolik",
+			"en": "❌ Error finding user",
+		}, lang))
+		return true
+	}
+	
+	// Проверяем, не является ли пользователь уже мастером или админом
+	if targetUser.Role == models.UserRoleMaster {
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": fmt.Sprintf("ℹ️ Пользователь %s уже является мастером", targetUser.FullName()),
+			"uz": fmt.Sprintf("ℹ️ Foydalanuvchi %s allaqachon usta", targetUser.FullName()),
+			"en": fmt.Sprintf("ℹ️ User %s is already a master", targetUser.FullName()),
+		}, lang))
+		stateService.ClearState(user.TelegramID)
+		return true
+	}
+	
+	if targetUser.Role == models.UserRoleAdmin {
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": fmt.Sprintf("❌ Пользователь %s является администратором. Нельзя изменить роль", targetUser.FullName()),
+			"uz": fmt.Sprintf("❌ Foydalanuvchi %s administrator. Rolni o'zgartirib bo'lmaydi", targetUser.FullName()),
+			"en": fmt.Sprintf("❌ User %s is an administrator. Cannot change role", targetUser.FullName()),
+		}, lang))
+		stateService.ClearState(user.TelegramID)
+		return true
+	}
+	
+	// Изменяем роль на мастера
+	targetUser.Role = models.UserRoleMaster
+	targetUser.IsActive = true
+	
+	if err := db.Save(&targetUser).Error; err != nil {
+		log.Printf("Error updating user role: %v", err)
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Ошибка при изменении роли пользователя",
+			"uz": "❌ Foydalanuvchi rolini o'zgartirishda xatolik",
+			"en": "❌ Error changing user role",
+		}, lang))
+		return true
+	}
+	
+	// Отправляем уведомление об успехе
+	successText := fmt.Sprintf(i18n.GetText(map[string]string{
+		"ru": "✅ Пользователь %s успешно назначен мастером!\n\n👤 Имя: %s\n🆔 ID: %d\n📱 Telegram ID: %d",
+		"uz": "✅ Foydalanuvchi %s muvaffaqiyatli usta etib tayinlandi!\n\n👤 Ismi: %s\n🆔 ID: %d\n📱 Telegram ID: %d",
+		"en": "✅ User %s successfully assigned as master!\n\n👤 Name: %s\n🆔 ID: %d\n📱 Telegram ID: %d",
+	}, lang), targetUser.FullName(), targetUser.FullName(), targetUser.ID, targetUser.TelegramID)
+	
+	// Кнопка возврата к мастерам
+	backButton := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(
+				i18n.GetText(map[string]string{
+					"ru": "👥 К списку мастеров",
+					"uz": "👥 Ustalar ro'yxatiga",
+					"en": "👥 To masters list",
+				}, lang),
+				"masters_list_all"),
+			tgbotapi.NewInlineKeyboardButtonData(
+				i18n.GetText(map[string]string{
+					"ru": "🏠 Главное меню",
+					"uz": "🏠 Asosiy menyu",
+					"en": "🏠 Main menu",
+				}, lang),
+				"main_menu"),
+		),
+	)
+	
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, successText)
+	msg.ReplyMarkup = backButton
+	
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending success message: %v", err)
+	}
+	
+	// Уведомляем нового мастера
+	notifyNewMaster(bot, &targetUser)
+	
+	// Очищаем состояние
+	stateService.ClearState(user.TelegramID)
+	
+	log.Printf("User %d (%s) promoted to master by admin %d", targetUser.TelegramID, targetUser.FullName(), user.TelegramID)
+	return true
+}
+
+// notifyNewMaster уведомляет пользователя о назначении мастером
+func notifyNewMaster(bot *tgbotapi.BotAPI, user *models.User) {
+	lang := user.GetLanguage()
+	
+	messageText := i18n.GetText(map[string]string{
+		"ru": "🎉 Поздравляем! Вы назначены мастером в ремонтной мастерской!\n\nТеперь у вас есть доступ к управлению заказами. Используйте /start чтобы увидеть новые возможности.",
+		"uz": "🎉 Tabriklaymiz! Siz ta'mirlash ustaxonasida usta etib tayinlandingiz!\n\nEndi sizda buyurtmalarni boshqarish imkoniyati bor. Yangi imkoniyatlarni ko'rish uchun /start dan foydalaning.",
+		"en": "🎉 Congratulations! You have been appointed as a master in the repair shop!\n\nYou now have access to order management. Use /start to see new features.",
+	}, lang)
+	
+	msg := tgbotapi.NewMessage(user.TelegramID, messageText)
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error notifying new master %d: %v", user.TelegramID, err)
+	}
 }

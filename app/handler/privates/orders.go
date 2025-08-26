@@ -180,31 +180,43 @@ func NewOrder(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, 
 func Masters(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB, langCache *i18n.LanguageCache) {
 	lang := langCache.Get(update.Message.From.ID)
 
-	// Временная заглушка
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "👥 "+i18n.GetText(map[string]string{
-		"ru": "Управление мастерами (функция в разработке)",
-		"uz": "Ustalarni boshqarish (funksiya ishlab chiqilmoqda)",
-		"en": "Managing masters (function in development)",
-	}, lang))
+	messageText := "👥 " + i18n.GetText(map[string]string{
+		"ru": "Управление мастерами",
+		"uz": "Ustalarni boshqarish",
+		"en": "Masters management",
+	}, lang) + "\n\n" + i18n.GetText(map[string]string{
+		"ru": "Выберите действие для управления мастерами:",
+		"uz": "Ustalarni boshqarish uchun amalni tanlang:",
+		"en": "Choose an action for masters management:",
+	}, lang)
+
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, messageText)
+	msg.ReplyMarkup = getMastersMainKeyboard(lang)
 
 	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Error sending masters: %v", err)
+		log.Printf("Error sending masters menu: %v", err)
 	}
 }
 
-// Analytics показывает аналитику (только для админов)
+// Analytics показывает главное меню аналитики (только для админов)
 func Analytics(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB, langCache *i18n.LanguageCache) {
 	lang := langCache.Get(update.Message.From.ID)
 
-	// Временная заглушка
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "📈 "+i18n.GetText(map[string]string{
-		"ru": "Аналитика (функция в разработке)",
-		"uz": "Analitika (funksiya ishlab chiqilmoqda)",
-		"en": "Analytics (function in development)",
-	}, lang))
+	messageText := "📊 " + i18n.GetText(map[string]string{
+		"ru": "Статистика и аналитика",
+		"uz": "Statistika va analitika", 
+		"en": "Statistics and analytics",
+	}, lang) + "\n\n" + i18n.GetText(map[string]string{
+		"ru": "Выберите тип статистики или период для просмотра:",
+		"uz": "Statistika turini yoki ko'rish uchun davrni tanlang:",
+		"en": "Choose statistics type or period to view:",
+	}, lang)
+
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, messageText)
+	msg.ReplyMarkup = getStatisticsMainKeyboard(lang)
 
 	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Error sending analytics: %v", err)
+		log.Printf("Error sending analytics menu: %v", err)
 	}
 }
 

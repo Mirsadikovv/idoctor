@@ -14,9 +14,10 @@ const (
 	StateWaitingCustomerName  UserStateType = "waiting_customer_name"
 	StateWaitingCustomerPhone UserStateType = "waiting_customer_phone"
 	StateWaitingDeviceBrand   UserStateType = "waiting_device_brand"
-	StateWaitingDeviceModel   UserStateType = "waiting_device_model"
-	StateWaitingDeviceIssue   UserStateType = "waiting_device_issue"
-	StateConfirmingOrder      UserStateType = "confirming_order"
+	StateWaitingDeviceModel     UserStateType = "waiting_device_model"
+	StateWaitingDeviceIssue     UserStateType = "waiting_device_issue"
+	StateConfirmingOrder        UserStateType = "confirming_order"
+	StateWaitingMasterTelegramID UserStateType = "waiting_master_telegram_id"
 )
 
 type UserState struct {
