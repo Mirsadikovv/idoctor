@@ -20,6 +20,7 @@ func Start(cfg *config.Config, db *gorm.DB) error {
 		&models.Customer{},
 		&models.Device{},
 		&models.Part{},
+		&models.UserState{},
 	)
 	if err != nil {
 		log.Printf("Ошибка автомиграции: %v", err)

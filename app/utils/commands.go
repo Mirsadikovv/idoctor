@@ -9,6 +9,7 @@ func GetBotCommands() []tgbotapi.BotCommand {
 		{Command: "/start", Description: "Регистрация и главное меню"},
 		{Command: "/menu", Description: "Главное меню"},
 		{Command: "/orders", Description: "Мои заказы"},
+		{Command: "/search", Description: "Поиск устройств"},
 		{Command: "/help", Description: "Помощь"},
 	}
 }

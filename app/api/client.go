@@ -64,6 +64,11 @@ type User struct {
 
 // GetDevices получает список устройств
 func (c *APIClient) GetDevices() ([]Device, error) {
+	// Пока API сервер не готов, возвращаем мок данные
+	if c.baseURL == "http://localhost:8080" {
+		return c.getMockDevices(), nil
+	}
+	
 	url := fmt.Sprintf("%s/api/v1/devices", c.baseURL)
 	
 	req, err := http.NewRequest("GET", url, nil)
@@ -95,6 +100,18 @@ func (c *APIClient) GetDevices() ([]Device, error) {
 
 // GetDevicesByMaster получает устройства конкретного мастера
 func (c *APIClient) GetDevicesByMaster(masterID uint) ([]Device, error) {
+	// Пока API сервер не готов, возвращаем мок данные
+	if c.baseURL == "http://localhost:8080" {
+		allDevices := c.getMockDevices()
+		var masterDevices []Device
+		for _, device := range allDevices {
+			if device.MasterID != nil && *device.MasterID == masterID {
+				masterDevices = append(masterDevices, device)
+			}
+		}
+		return masterDevices, nil
+	}
+	
 	url := fmt.Sprintf("%s/api/v1/devices?master_id=%d", c.baseURL, masterID)
 	
 	req, err := http.NewRequest("GET", url, nil)
@@ -126,6 +143,12 @@ func (c *APIClient) GetDevicesByMaster(masterID uint) ([]Device, error) {
 
 // UpdateDeviceStatus обновляет статус устройства
 func (c *APIClient) UpdateDeviceStatus(deviceID uint, status string) error {
+	// Пока API сервер не готов, просто логируем
+	if c.baseURL == "http://localhost:8080" {
+		// Мок - просто возвращаем успех
+		return nil
+	}
+	
 	url := fmt.Sprintf("%s/api/v1/devices/%d/status", c.baseURL, deviceID)
 	
 	payload := map[string]string{"status": status}
@@ -155,6 +178,86 @@ func (c *APIClient) UpdateDeviceStatus(deviceID uint, status string) error {
 	}
 	
 	return nil
+}
+
+// getMockDevices возвращает тестовые данные
+func (c *APIClient) getMockDevices() []Device {
+	price1 := 150000.0
+	price2 := 75000.0
+	masterID1 := uint(1)
+	masterID2 := uint(2)
+	
+	return []Device{
+		{
+			ID:           1,
+			CustomerID:   1,
+			MasterID:     &masterID1,
+			Model:        "iPhone 12",
+			Brand:        "Apple",
+			SerialNumber: "ABC123456789",
+			Issue:        "Не включается, попадала в воду",
+			Status:       "in_progress",
+			Price:        &price1,
+			CreatedAt:    "2024-01-15T10:00:00Z",
+			UpdatedAt:    "2024-01-15T10:00:00Z",
+			Customer: &Customer{
+				ID:          1,
+				Name:        "Иван Иванов",
+				PhoneNumber: "+998901234567",
+				Email:       "ivan@example.com",
+			},
+			Master: &User{
+				ID:         1,
+				TelegramID: 833391285,
+				Name:       "Мастер Иван",
+				Role:       "master",
+				IsActive:   true,
+			},
+		},
+		{
+			ID:           2,
+			CustomerID:   2,
+			MasterID:     &masterID2,
+			Model:        "Galaxy S21",
+			Brand:        "Samsung",
+			SerialNumber: "DEF987654321",
+			Issue:        "Разбитый экран",
+			Status:       "ready",
+			Price:        &price2,
+			CreatedAt:    "2024-01-16T09:30:00Z",
+			UpdatedAt:    "2024-01-16T09:30:00Z",
+			Customer: &Customer{
+				ID:          2,
+				Name:        "Мария Петрова",
+				PhoneNumber: "+998907654321",
+				Email:       "maria@example.com",
+			},
+			Master: &User{
+				ID:         2,
+				TelegramID: 7233051530,
+				Name:       "Мастер Петр",
+				Role:       "master",
+				IsActive:   true,
+			},
+		},
+		{
+			ID:         3,
+			CustomerID: 3,
+			MasterID:   nil,
+			Model:      "iPhone 13",
+			Brand:      "Apple",
+			Issue:      "Батарея быстро разряжается",
+			Status:     "received",
+			Price:      nil,
+			CreatedAt:  "2024-01-17T14:20:00Z",
+			UpdatedAt:  "2024-01-17T14:20:00Z",
+			Customer: &Customer{
+				ID:          3,
+				Name:        "Алексей Сидоров",
+				PhoneNumber: "+998903456789",
+			},
+		},
+	}
 }
 
 // CreateDevice создает новое устройство

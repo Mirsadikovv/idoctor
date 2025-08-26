@@ -190,6 +190,11 @@ var Buttons = map[string]map[string]string{
 		"uz": "🌐 Tilni o'zgartirish",
 		"en": "🌐 Change language",
 	},
+	"search": {
+		"ru": "🔍 Поиск",
+		"uz": "🔍 Qidiruv",
+		"en": "🔍 Search",
+	},
 	"russian": {
 		"ru": "🇷🇺 Русский",
 		"uz": "🇷🇺 Русский",
