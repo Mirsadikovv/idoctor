@@ -7,6 +7,7 @@ import (
 	"idoctor-bot/app/config"
 	"idoctor-bot/app/i18n"
 	"idoctor-bot/app/models"
+	"idoctor-bot/app/services"
 	"idoctor-bot/app/utils"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -14,6 +15,10 @@ import (
 )
 
 func Start(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB, langCache *i18n.LanguageCache) {
+	// Очищаем состояние пользователя при команде /start
+	stateService := services.NewStateService(db)
+	stateService.ClearState(update.Message.From.ID)
+	
 	var user models.User
 	
 	// Проверяем существует ли пользователь

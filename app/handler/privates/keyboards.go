@@ -103,19 +103,19 @@ func getOrderActionsKeyboard(orderID uint, isAdmin bool) tgbotapi.InlineKeyboard
 	var buttons [][]tgbotapi.InlineKeyboardButton
 
 	buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
-		tgbotapi.NewInlineKeyboardButtonData("🔄 Изменить статус", "change_status_"+string(rune(orderID))),
-		tgbotapi.NewInlineKeyboardButtonData("💰 Установить цену", "set_price_"+string(rune(orderID))),
+		tgbotapi.NewInlineKeyboardButtonData("🔄 Изменить статус", fmt.Sprintf("status_change_%d", orderID)),
+		tgbotapi.NewInlineKeyboardButtonData("💰 Установить цену", fmt.Sprintf("price_set_%d", orderID)),
 	})
 
 	if isAdmin {
 		buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
-			tgbotapi.NewInlineKeyboardButtonData("👨‍🔧 Назначить мастера", "assign_master_"+string(rune(orderID))),
-			tgbotapi.NewInlineKeyboardButtonData("✏️ Редактировать", "edit_order_"+string(rune(orderID))),
+			tgbotapi.NewInlineKeyboardButtonData("👨‍🔧 Назначить мастера", fmt.Sprintf("master_assign_%d", orderID)),
+			tgbotapi.NewInlineKeyboardButtonData("✏️ Редактировать", fmt.Sprintf("order_edit_%d", orderID)),
 		})
 	}
 
 	buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
-		tgbotapi.NewInlineKeyboardButtonData("ℹ️ Подробно", "details_"+string(rune(orderID))),
+		tgbotapi.NewInlineKeyboardButtonData("ℹ️ Подробно", fmt.Sprintf("order_details_%d", orderID)),
 		tgbotapi.NewInlineKeyboardButtonData("🔙 Назад", "back_to_orders"),
 	})
 

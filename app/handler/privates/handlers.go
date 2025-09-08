@@ -152,6 +152,25 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 	}
 
 	action := parts[0]
+	
+	// Специальная обработка для составных callback data без разделения по параметрам
+	simpleCallbacks := []string{
+		"main_menu", "back_to_masters", "back_to_orders", "back_to_stats",
+		"all_orders", "new_order", "main_masters", "analytics", "search", "my_orders",
+		"stats_general", "stats_masters", "stats_refresh", "masters_refresh",
+		"masters_add", "status_received", "status_in_progress", "status_waiting_parts",
+		"status_ready", "status_completed", "status_cancelled", "help_contact",
+		"orders_refresh", "masters_list_all", "masters_list_active",
+		"stats_period_today", "stats_period_yesterday", "stats_period_week", 
+		"stats_period_month", "stats_period_year", "stats_period_all_time",
+	}
+	
+	for _, callback := range simpleCallbacks {
+		if data == callback {
+			action = data
+			break
+		}
+	}
 
 	switch action {
 	case "order":
@@ -269,8 +288,60 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 		}
 	case "search":
 		handleSearchCallback(bot, callback, cfg, db, &user)
+	case "back_to_orders":
+		handleBackToOrdersCallback(bot, callback, cfg, db, &user)
+	case "status_received", "status_in_progress", "status_waiting_parts", "status_ready", "status_completed", "status_cancelled":
+		handleStatusSetCallback(bot, callback, cfg, db, &user, action)
+	case "help_contact":
+		handleHelpContactCallback(bot, callback, &user)
+	case "orders_refresh":
+		handleOrdersRefreshCallback(bot, callback, cfg, db, &user)
 	default:
-		answerCallback(bot, callback.ID, i18n.GetText(i18n.UnknownAction, lang))
+		// Проверяем составные callback data
+		if strings.HasPrefix(action, "change_status_") {
+			handleChangeStatusCallback(bot, callback, cfg, db, &user, action)
+		} else if strings.HasPrefix(action, "set_price_") {
+			handleSetPriceCallback(bot, callback, cfg, db, &user, action)
+		} else if strings.HasPrefix(action, "assign_master_") {
+			handleAssignMasterCallback(bot, callback, cfg, db, &user, action)
+		} else if strings.HasPrefix(action, "edit_order_") {
+			handleEditOrderCallback(bot, callback, cfg, db, &user, action)
+		} else if strings.HasPrefix(action, "details_") {
+			handleOrderDetailsCallback(bot, callback, cfg, db, &user, action)
+		} else if strings.HasPrefix(action, "order_details_") {
+			handleOrderDetailsCallback(bot, callback, cfg, db, &user, action)
+		} else if strings.HasPrefix(action, "orders_page_") {
+			handleOrdersPageCallback(bot, callback, cfg, db, &user, action)
+		} else if strings.HasPrefix(action, "status_set_") {
+			handleStatusSetCallbackComposite(bot, callback, cfg, db, &user, action)
+		} else if strings.HasPrefix(action, "order_nav_") {
+			// Обрабатываем order_nav_back_to_* callback data
+			parts := strings.Split(data, "_")
+			if len(parts) >= 4 && parts[2] == "back" && parts[3] == "to" {
+				handleOrderNavigation(bot, callback, cfg, db, "back_to_"+parts[4], &user)
+			}
+		} else if action == "stats_general" {
+			handleStatsGeneralCallback(bot, callback, cfg, db, &user)
+		} else if action == "stats_masters" {
+			handleStatsMastersCallback(bot, callback, cfg, db, &user)
+		} else if strings.HasPrefix(action, "stats_period_") {
+			handleStatsPeriodCallback(bot, callback, cfg, db, &user, action)
+		} else if action == "stats_refresh" {
+			handleAnalyticsCallback(bot, callback, cfg, db, &user)
+		} else if action == "masters_refresh" {
+			handleMastersMenuCallback(bot, callback, cfg, db, &user)
+		} else if action == "masters_list_all" {
+			handleMastersListAllCallback(bot, callback, cfg, db, &user)
+		} else if action == "masters_list_active" {
+			handleMastersListActiveCallback(bot, callback, cfg, db, &user)
+		} else if action == "masters_add" {
+			handleMastersAddCallback(bot, callback, cfg, db, &user)
+		} else if strings.HasPrefix(action, "master_action_") {
+			// Обрабатываем master_action_* callback data
+			handleMasterActionCallback(bot, callback, cfg, db, &user, action)
+		} else {
+			answerCallback(bot, callback.ID, i18n.GetText(i18n.UnknownAction, lang))
+		}
 	}
 }
 
@@ -1078,11 +1149,22 @@ func showPeriodStatistics(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery
 
 // handleBackToStatistics возвращает к главному меню статистики
 func handleBackToStatistics(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	// Очищаем состояние пользователя при возврате к статистике
+	clearUserState(db, user.TelegramID)
+	
 	showStatisticsMainMenu(bot, callback, user)
+}
+
+// clearUserState очищает состояние пользователя (вспомогательная функция)
+func clearUserState(db *gorm.DB, userTelegramID int64) {
+	stateService := services.NewStateService(db)
+	stateService.ClearState(userTelegramID)
 }
 
 // handleMainMenuCallback обрабатывает возврат в главное меню
 func handleMainMenuCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	// Очищаем состояние пользователя при возврате в главное меню
+	clearUserState(db, user.TelegramID)
 	lang := user.GetLanguage()
 	
 	// Редактируем текущее сообщение на главное меню с inline клавиатурой
@@ -1092,12 +1174,26 @@ func handleMainMenuCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQue
 		"en": "🏠 Main menu\n\nChoose an action:",
 	}, lang)
 	
-	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
 	keyboard := getMainInlineKeyboard(user.Role == models.UserRoleAdmin, lang)
+	
+	// Пытаемся отредактировать сообщение
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
 	editMsg.ReplyMarkup = &keyboard
 	
 	if _, err := bot.Send(editMsg); err != nil {
-		log.Printf("Error editing main menu: %v", err)
+		log.Printf("Error editing main menu text: %v", err)
+		// Если не удалось отредактировать текст, отправляем новое сообщение
+		msg := tgbotapi.NewMessage(callback.Message.Chat.ID, messageText)
+		msg.ReplyMarkup = keyboard
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending new main menu message: %v", err)
+		}
+	} else {
+		// Если редактирование текста прошло успешно, обновляем клавиатуру
+		editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, keyboard)
+		if _, err := bot.Send(editMarkup); err != nil {
+			log.Printf("Error editing main menu markup: %v", err)
+		}
 	}
 	
 	// Отвечаем на callback
@@ -1195,6 +1291,476 @@ func handleSearchCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending search message: %v", err)
 	}
+	answerCallback(bot, callback.ID, "")
+}
+
+// Недостающие callback-обработчики
+
+func handleBackToOrdersCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	// Очищаем состояние пользователя при возврате к заказам
+	clearUserState(db, user.TelegramID)
+	
+	if utils.IsAdmin(callback.From.ID, cfg) {
+		handleAllOrdersCallback(bot, callback, cfg, db, user)
+	} else {
+		handleMyOrdersCallback(bot, callback, cfg, db, user)
+	}
+}
+
+func handleStatusSetCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, status string) {
+	lang := user.GetLanguage()
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, i18n.GetText(map[string]string{
+		"ru": "⚠️ Функция изменения статуса находится в разработке",
+		"uz": "⚠️ Status o'zgartirish funksiyasi ishlab chiqilmoqda",
+		"en": "⚠️ Status change function is under development",
+	}, lang))
+	
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending status message: %v", err)
+	}
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleHelpContactCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, user *models.User) {
+	lang := user.GetLanguage()
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, i18n.GetText(map[string]string{
+		"ru": "📞 Для связи с поддержкой обратитесь к администратору",
+		"uz": "📞 Qo'llab-quvvatlash uchun administratorga murojaat qiling",
+		"en": "📞 To contact support, please contact the administrator",
+	}, lang))
+	
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending contact message: %v", err)
+	}
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleOrdersRefreshCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	handleBackToOrdersCallback(bot, callback, cfg, db, user)
+}
+
+func handleChangeStatusCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, action string) {
+	lang := user.GetLanguage()
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, i18n.GetText(map[string]string{
+		"ru": "🔄 Функция изменения статуса заказа находится в разработке",
+		"uz": "🔄 Buyurtma statusini o'zgartirish funksiyasi ishlab chiqilmoqda",
+		"en": "🔄 Order status change function is under development",
+	}, lang))
+	
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending change status message: %v", err)
+	}
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleSetPriceCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, action string) {
+	lang := user.GetLanguage()
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, i18n.GetText(map[string]string{
+		"ru": "💰 Функция установки цены находится в разработке",
+		"uz": "💰 Narx belgilash funksiyasi ishlab chiqilmoqda",
+		"en": "💰 Price setting function is under development",
+	}, lang))
+	
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending set price message: %v", err)
+	}
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleAssignMasterCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, action string) {
+	lang := user.GetLanguage()
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, i18n.GetText(map[string]string{
+		"ru": "👨‍🔧 Функция назначения мастера находится в разработке",
+		"uz": "👨‍🔧 Usta tayinlash funksiyasi ishlab chiqilmoqda",
+		"en": "👨‍🔧 Master assignment function is under development",
+	}, lang))
+	
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending assign master message: %v", err)
+	}
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleEditOrderCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, action string) {
+	lang := user.GetLanguage()
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, i18n.GetText(map[string]string{
+		"ru": "✏️ Функция редактирования заказа находится в разработке",
+		"uz": "✏️ Buyurtmani tahrirlash funksiyasi ishlab chiqilmoqda",
+		"en": "✏️ Order editing function is under development",
+	}, lang))
+	
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending edit order message: %v", err)
+	}
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleOrderDetailsCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, action string) {
+	lang := user.GetLanguage()
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, i18n.GetText(map[string]string{
+		"ru": "ℹ️ Функция просмотра деталей заказа находится в разработке",
+		"uz": "ℹ️ Buyurtma tafsilotlarini ko'rish funksiyasi ishlab chiqilmoqda",
+		"en": "ℹ️ Order details viewing function is under development",
+	}, lang))
+	
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending order details message: %v", err)
+	}
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleOrdersPageCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, action string) {
+	lang := user.GetLanguage()
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, i18n.GetText(map[string]string{
+		"ru": "📄 Функция пагинации находится в разработке",
+		"uz": "📄 Sahifalash funksiyasi ishlab chiqilmoqda",
+		"en": "📄 Pagination function is under development",
+	}, lang))
+	
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending pagination message: %v", err)
+	}
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleStatusSetCallbackComposite(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, action string) {
+	// Парсим status_set_{orderID}_{status}
+	parts := strings.Split(action, "_")
+	if len(parts) >= 3 {
+		handleStatusSetCallback(bot, callback, cfg, db, user, parts[2])
+	} else {
+		handleStatusSetCallback(bot, callback, cfg, db, user, "unknown")
+	}
+}
+
+func handleMasterActionCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, action string) {
+	// Парсим master_action_{action}_{masterID}
+	parts := strings.Split(action, "_")
+	if len(parts) < 4 {
+		answerCallback(bot, callback.ID, i18n.GetText(i18n.InvalidDataFormat, user.GetLanguage()))
+		return
+	}
+	
+	masterAction := parts[2]
+	masterID := parts[3]
+	
+	switch masterAction {
+	case "profile":
+		// Показать профиль мастера
+		handleMasterProfileCallback(bot, callback, cfg, db, user, masterID)
+	case "toggle":
+		// Переключить статус мастера
+		handleMasterToggleCallback(bot, callback, cfg, db, user, masterID)
+	case "orders":
+		// Показать заказы мастера
+		handleMasterOrdersCallback(bot, callback, cfg, db, user, masterID)
+	case "refresh":
+		// Обновить профиль мастера
+		handleMasterProfileCallback(bot, callback, cfg, db, user, masterID)
+	default:
+		answerCallback(bot, callback.ID, i18n.GetText(i18n.UnknownAction, user.GetLanguage()))
+	}
+}
+
+func handleMasterProfileCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, masterID string) {
+	lang := user.GetLanguage()
+	
+	// Конвертируем masterID в uint
+	id, err := strconv.ParseUint(masterID, 10, 32)
+	if err != nil {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Неверный ID мастера",
+			"uz": "Noto'g'ri usta ID",
+			"en": "Invalid master ID",
+		}, lang))
+		return
+	}
+	
+	masterService := services.NewMasterService(db)
+	masterInfo, err := masterService.GetMasterWithStats(uint(id))
+	if err != nil {
+		log.Printf("Error getting master profile: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Ошибка получения профиля мастера",
+			"uz": "Usta profilini olishda xatolik",
+			"en": "Error getting master profile",
+		}, lang))
+		return
+	}
+	
+	// Форматируем профиль мастера
+	messageText := masterService.FormatMasterProfile(masterInfo, lang)
+	
+	// Создаем клавиатуру
+	keyboard := getMasterProfileKeyboard(uint(id), masterInfo.User.IsActive, lang)
+	
+	// Редактируем сообщение
+	editText := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editText.ParseMode = "Markdown"
+	if _, err := bot.Send(editText); err != nil {
+		log.Printf("Error editing master profile text: %v", err)
+	}
+	
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, keyboard)
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing master profile markup: %v", err)
+	}
+	
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleMasterToggleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, masterID string) {
+	lang := user.GetLanguage()
+	
+	// Проверяем права доступа (только админы)
+	if user.Role != models.UserRoleAdmin {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Нет доступа",
+			"uz": "❌ Ruxsat yo'q",
+			"en": "❌ Access denied",
+		}, lang))
+		return
+	}
+	
+	// Конвертируем masterID в uint
+	id, err := strconv.ParseUint(masterID, 10, 32)
+	if err != nil {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Неверный ID мастера",
+			"uz": "Noto'g'ri usta ID",
+			"en": "Invalid master ID",
+		}, lang))
+		return
+	}
+	
+	masterService := services.NewMasterService(db)
+	
+	// Переключаем статус
+	err = masterService.ToggleMasterStatus(uint(id))
+	if err != nil {
+		log.Printf("Error toggling master status: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Ошибка изменения статуса мастера",
+			"uz": "Usta statusini o'zgartirishda xatolik",
+			"en": "Error changing master status",
+		}, lang))
+		return
+	}
+	
+	// Получаем обновлённые данные мастера
+	masterInfo, err := masterService.GetMasterWithStats(uint(id))
+	if err != nil {
+		log.Printf("Error getting updated master info: %v", err)
+		return
+	}
+	
+	// Обновляем отображение профиля
+	messageText := masterService.FormatMasterProfile(masterInfo, lang)
+	keyboard := getMasterProfileKeyboard(uint(id), masterInfo.User.IsActive, lang)
+	
+	// Редактируем сообщение
+	editText := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editText.ParseMode = "Markdown"
+	if _, err := bot.Send(editText); err != nil {
+		log.Printf("Error editing master profile after toggle: %v", err)
+	}
+	
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, keyboard)
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing master profile markup after toggle: %v", err)
+	}
+	
+	// Подтверждаем успешное изменение
+	statusText := "Активирован"
+	if !masterInfo.User.IsActive {
+		statusText = "Деактивирован"
+	}
+	
+	switch lang {
+	case "uz":
+		if masterInfo.User.IsActive {
+			statusText = "Faollashtirildi"
+		} else {
+			statusText = "Faolsizlantirildi"
+		}
+	case "en":
+		if masterInfo.User.IsActive {
+			statusText = "Activated"
+		} else {
+			statusText = "Deactivated"
+		}
+	}
+	
+	answerCallback(bot, callback.ID, fmt.Sprintf("✅ %s", statusText))
+}
+
+func handleMasterOrdersCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, masterID string) {
+	lang := user.GetLanguage()
+	
+	// Конвертируем masterID в uint
+	id, err := strconv.ParseUint(masterID, 10, 32)
+	if err != nil {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Неверный ID мастера",
+			"uz": "Noto'g'ri usta ID",
+			"en": "Invalid master ID",
+		}, lang))
+		return
+	}
+	
+	masterService := services.NewMasterService(db)
+	
+	// Получаем заказы мастера
+	devices, err := masterService.GetMasterDevices(uint(id), "")
+	if err != nil {
+		log.Printf("Error getting master devices: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Ошибка получения заказов мастера",
+			"uz": "Usta buyurtmalarini olishda xatolik",
+			"en": "Error getting master orders",
+		}, lang))
+		return
+	}
+	
+	// Получаем информацию о мастере
+	masterInfo, err := masterService.GetMasterWithStats(uint(id))
+	if err != nil {
+		log.Printf("Error getting master info: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Ошибка получения данных мастера",
+			"uz": "Usta ma'lumotlarini olishda xatolik",
+			"en": "Error getting master data",
+		}, lang))
+		return
+	}
+	
+	var messageText string
+	if len(devices) == 0 {
+		messageText = fmt.Sprintf("📋 %s\n\n%s: %s\n\n%s",
+			i18n.GetText(map[string]string{
+				"ru": "Заказы мастера",
+				"uz": "Usta buyurtmalari",
+				"en": "Master orders",
+			}, lang),
+			i18n.GetText(map[string]string{
+				"ru": "Мастер",
+				"uz": "Usta",
+				"en": "Master",
+			}, lang),
+			masterInfo.User.FullName(),
+			i18n.GetText(map[string]string{
+				"ru": "У мастера пока нет заказов",
+				"uz": "Ustada hozircha buyurtmalar yo'q",
+				"en": "The master has no orders yet",
+			}, lang))
+	} else {
+		// Форматируем список заказов
+		messageText = fmt.Sprintf("📋 %s\n\n%s: **%s**\n\n",
+			i18n.GetText(map[string]string{
+				"ru": "Заказы мастера",
+				"uz": "Usta buyurtmalari",
+				"en": "Master orders",
+			}, lang),
+			i18n.GetText(map[string]string{
+				"ru": "Мастер",
+				"uz": "Usta",
+				"en": "Master",
+			}, lang),
+			masterInfo.User.FullName())
+		
+		// Показываем только первые 5 заказов
+		maxOrders := len(devices)
+		if maxOrders > 5 {
+			maxOrders = 5
+		}
+		
+		for i := 0; i < maxOrders; i++ {
+			device := devices[i]
+			statusText := device.Status.Text()
+			
+			messageText += fmt.Sprintf("**%d. %s %s**\n",
+				i+1, device.DeviceType, device.Brand)
+			
+			if device.Model != "" {
+				messageText += fmt.Sprintf("📱 %s\n", device.Model)
+			}
+			
+			messageText += fmt.Sprintf("⚡️ %s: %s\n", 
+				i18n.GetText(map[string]string{
+					"ru": "Статус",
+					"uz": "Status",
+					"en": "Status",
+				}, lang), statusText)
+			
+			if device.Customer != nil {
+				messageText += fmt.Sprintf("👤 %s: %s\n",
+					i18n.GetText(map[string]string{
+						"ru": "Клиент",
+						"uz": "Mijoz",
+						"en": "Customer",
+					}, lang), device.Customer.Name)
+			}
+			
+			if device.TotalCost > 0 {
+				messageText += fmt.Sprintf("💰 %.0f сум\n", device.TotalCost)
+			}
+			
+			messageText += "\n"
+		}
+		
+		if len(devices) > 5 {
+			messageText += fmt.Sprintf("… и ещё %d заказов", len(devices)-5)
+		}
+	}
+	
+	// Создаём клавиатуру с возвратом
+	var keyboard [][]tgbotapi.InlineKeyboardButton
+	
+	// Кнопка возврата к профилю мастера
+	keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData(
+			i18n.GetText(map[string]string{
+				"ru": "👤 К профилю мастера",
+				"uz": "👤 Usta profiliga",
+				"en": "👤 To master profile",
+			}, lang),
+			fmt.Sprintf("master_action_profile_%s", masterID)),
+	})
+	
+	// Кнопка обновления
+	keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData(
+			i18n.GetText(map[string]string{
+				"ru": "🔄 Обновить",
+				"uz": "🔄 Yangilash",
+				"en": "🔄 Refresh",
+			}, lang),
+			fmt.Sprintf("master_action_orders_%s", masterID)),
+	})
+	
+	// Кнопка возврата к списку мастеров
+	keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData(
+			i18n.GetText(map[string]string{
+				"ru": "👥 К мастерам",
+				"uz": "👥 Ustalarga",
+				"en": "👥 To masters",
+			}, lang),
+			"back_to_masters"),
+	})
+	
+	// Редактируем сообщение
+	editText := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editText.ParseMode = "Markdown"
+	if _, err := bot.Send(editText); err != nil {
+		log.Printf("Error editing master orders text: %v", err)
+	}
+	
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, tgbotapi.NewInlineKeyboardMarkup(keyboard...))
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing master orders markup: %v", err)
+	}
+	
 	answerCallback(bot, callback.ID, "")
 }
 
@@ -1500,10 +2066,11 @@ func showMastersList(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, mas
 	}
 	if _, err := bot.Send(editMarkup); err != nil {
 		log.Printf("Error editing masters list markup: %v", err)
-	}
-	
-	answerCallback(bot, callback.ID, "")
+		}
+
+		answerCallback(bot, callback.ID, "")
 }
+
 
 // showMasterProfile показывает профиль мастера
 func showMasterProfile(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, masterService *services.MasterService, user *models.User, masterID uint) {
@@ -1562,6 +2129,9 @@ func toggleMasterStatus(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, 
 
 // handleBackToMasters возвращает к главному меню мастеров
 func handleBackToMasters(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	// Очищаем состояние пользователя при возврате к мастерам
+	clearUserState(db, user.TelegramID)
+	
 	showMastersMainMenu(bot, callback, user)
 }
 
@@ -1720,6 +2290,142 @@ func handleMasterTelegramIDInput(bot *tgbotapi.BotAPI, update tgbotapi.Update, d
 	return true
 }
 
+// handleStatsGeneralCallback обрабатывает callback общей статистики
+func handleStatsGeneralCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	lang := user.GetLanguage()
+	statsService := services.NewStatisticsService(db)
+	
+	stats, err := statsService.GetOverallStatistics()
+	if err != nil {
+		log.Printf("Error getting general statistics: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Ошибка получения статистики",
+			"uz": "❌ Statistika olishda xatolik",
+			"en": "❌ Error getting statistics",
+		}, lang))
+		return
+	}
+	
+	messageText := formatGeneralStatistics(stats, lang)
+	
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, getStatisticsBackKeyboard(lang))
+	
+	if _, err := bot.Send(editMsg); err != nil {
+		log.Printf("Error editing stats general message: %v", err)
+	}
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing stats general markup: %v", err)
+	}
+	
+	answerCallback(bot, callback.ID, "")
+}
+
+// handleStatsMastersCallback обрабатывает callback статистики мастеров
+func handleStatsMastersCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	lang := user.GetLanguage()
+	statsService := services.NewStatisticsService(db)
+	
+	masterStats, err := statsService.GetMasterStatistics(models.PeriodAllTime)
+	if err != nil {
+		log.Printf("Error getting master statistics: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Ошибка получения статистики мастеров",
+			"uz": "❌ Ustalar statistikasini olishda xatolik",
+			"en": "❌ Error getting master statistics",
+		}, lang))
+		return
+	}
+	
+	messageText := statsService.FormatMasterStatistics(masterStats, lang)
+	if len(masterStats) == 0 {
+		messageText = i18n.GetText(map[string]string{
+			"ru": "👨‍🔧 Статистика мастеров\n\nПока нет данных для отображения",
+			"uz": "👨‍🔧 Ustalar statistikasi\n\nKo'rsatish uchun ma'lumotlar yo'q",
+			"en": "👨‍🔧 Master statistics\n\nNo data to display yet",
+		}, lang)
+	}
+	
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, getStatisticsBackKeyboard(lang))
+	
+	if _, err := bot.Send(editMsg); err != nil {
+		log.Printf("Error editing stats masters message: %v", err)
+	}
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing stats masters markup: %v", err)
+	}
+	
+	answerCallback(bot, callback.ID, "")
+}
+
+// handleStatsPeriodCallback обрабатывает callback статистики за период
+func handleStatsPeriodCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, action string) {
+	lang := user.GetLanguage()
+	
+	// Извлекаем период из action (stats_period_today, stats_period_week, etc.)
+	parts := strings.Split(action, "_")
+	if len(parts) < 3 {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Неверный формат периода",
+			"uz": "❌ Noto'g'ri davr formati", 
+			"en": "❌ Invalid period format",
+		}, lang))
+		return
+	}
+	
+	var period models.StatisticsPeriod
+	periodStr := parts[2]
+	
+	switch periodStr {
+	case "today":
+		period = models.PeriodToday
+	case "yesterday":
+		period = models.PeriodYesterday
+	case "week":
+		period = models.PeriodWeek
+	case "month":
+		period = models.PeriodMonth
+	case "year":
+		period = models.PeriodYear
+	case "all", "time":
+		period = models.PeriodAllTime
+	default:
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Неизвестный период",
+			"uz": "❌ Noma'lum davr",
+			"en": "❌ Unknown period",
+		}, lang))
+		return
+	}
+	
+	statsService := services.NewStatisticsService(db)
+	stats, err := statsService.GetPeriodStatistics(period)
+	if err != nil {
+		log.Printf("Error getting period statistics: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Ошибка получения статистики",
+			"uz": "❌ Statistika olishda xatolik",
+			"en": "❌ Error getting statistics",
+		}, lang))
+		return
+	}
+	
+	messageText := statsService.FormatStatistics(stats, lang)
+	
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, getStatisticsBackKeyboard(lang))
+	
+	if _, err := bot.Send(editMsg); err != nil {
+		log.Printf("Error editing stats period message: %v", err)
+	}
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing stats period markup: %v", err)
+	}
+	
+	answerCallback(bot, callback.ID, "")
+}
+
 // notifyNewMaster уведомляет пользователя о назначении мастером
 func notifyNewMaster(bot *tgbotapi.BotAPI, user *models.User) {
 	lang := user.GetLanguage()
@@ -1734,4 +2440,76 @@ func notifyNewMaster(bot *tgbotapi.BotAPI, user *models.User) {
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error notifying new master %d: %v", user.TelegramID, err)
 	}
+}
+
+// handleMastersListAllCallback обрабатывает показ всех мастеров
+func handleMastersListAllCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	lang := user.GetLanguage()
+	masterService := services.NewMasterService(db)
+	
+	masters, err := masterService.GetAllMasters()
+	if err != nil {
+		log.Printf("Error getting all masters: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Ошибка получения списка мастеров",
+			"uz": "❌ Ustalar ro'yxatini olishda xatolik",
+			"en": "❌ Error getting masters list",
+		}, lang))
+		return
+	}
+	
+	messageText := masterService.FormatMastersList(masters, lang)
+	keyboard := getMasterListKeyboard(masters, lang)
+	
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editMsg.ParseMode = "Markdown"
+	if _, err := bot.Send(editMsg); err != nil {
+		log.Printf("Error editing masters list text: %v", err)
+	}
+	
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, keyboard)
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing masters list markup: %v", err)
+	}
+	
+	answerCallback(bot, callback.ID, "")
+}
+
+// handleMastersListActiveCallback обрабатывает показ активных мастеров
+func handleMastersListActiveCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	lang := user.GetLanguage()
+	masterService := services.NewMasterService(db)
+	
+	masters, err := masterService.GetActiveMasters()
+	if err != nil {
+		log.Printf("Error getting active masters: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Ошибка получения списка активных мастеров",
+			"uz": "❌ Faol ustalar ro'yxatini olishda xatolik",
+			"en": "❌ Error getting active masters list",
+		}, lang))
+		return
+	}
+	
+	messageText := masterService.FormatMastersList(masters, lang)
+	keyboard := getMasterListKeyboard(masters, lang)
+	
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)
+	editMsg.ParseMode = "Markdown"
+	if _, err := bot.Send(editMsg); err != nil {
+		log.Printf("Error editing active masters list text: %v", err)
+	}
+	
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(callback.Message.Chat.ID, callback.Message.MessageID, keyboard)
+	if _, err := bot.Send(editMarkup); err != nil {
+		log.Printf("Error editing active masters list markup: %v", err)
+	}
+	
+	answerCallback(bot, callback.ID, "")
+}
+
+// handleMastersAddCallback обрабатывает добавление нового мастера
+func handleMastersAddCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	// Используем существующую функцию showAddMasterForm
+	showAddMasterForm(bot, callback, user, db)
 }
