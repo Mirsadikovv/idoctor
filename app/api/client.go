@@ -332,6 +332,126 @@ func (c *APIClient) GetUserByTelegramID(telegramID int64) (*User, error) {
 	return &user, nil
 }
 
+// CreateCustomer создает нового клиента
+func (c *APIClient) CreateCustomer(customer Customer) (*Customer, error) {
+	// Мок для тестирования
+	if c.baseURL == "http://localhost:8080" {
+		// Присваиваем ID для мок-данных
+		customer.ID = uint(time.Now().Unix() % 10000)
+		return &customer, nil
+	}
+	
+	url := fmt.Sprintf("%s/api/v1/customers", c.baseURL)
+	
+	jsonPayload, err := json.Marshal(customer)
+	if err != nil {
+		return nil, err
+	}
+	
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return nil, err
+	}
+	
+	req.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+	
+	var createdCustomer Customer
+	if err := json.NewDecoder(resp.Body).Decode(&createdCustomer); err != nil {
+		return nil, err
+	}
+	
+	return &createdCustomer, nil
+}
+
+// UpdateDevicePrice обновляет цену устройства
+func (c *APIClient) UpdateDevicePrice(deviceID uint, price float64) error {
+	// Мок для тестирования
+	if c.baseURL == "http://localhost:8080" {
+		return nil
+	}
+	
+	url := fmt.Sprintf("%s/api/v1/devices/%d/price", c.baseURL, deviceID)
+	
+	payload := map[string]float64{"price": price}
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return err
+	}
+	
+	req.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+	
+	return nil
+}
+
+// AssignMaster назначает мастера для устройства
+func (c *APIClient) AssignMaster(deviceID uint, masterID uint) error {
+	// Мок для тестирования
+	if c.baseURL == "http://localhost:8080" {
+		return nil
+	}
+	
+	url := fmt.Sprintf("%s/api/v1/devices/%d/master", c.baseURL, deviceID)
+	
+	payload := map[string]uint{"master_id": masterID}
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return err
+	}
+	
+	req.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+	
+	return nil
+}
+
 // SendNotification отправляет уведомление через основную систему
 func (c *APIClient) SendNotification(userID *uint, message string) error {
 	url := fmt.Sprintf("%s/api/v1/bot/send-notification", c.baseURL)

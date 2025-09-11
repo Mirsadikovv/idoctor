@@ -121,7 +121,7 @@ func AllOrders(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config,
 	}
 }
 
-// NewOrder создает новый заказ (только для админов)
+// NewOrder создает новый заказ (доступно для админов и мастеров)
 func NewOrder(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB, langCache *i18n.LanguageCache) {
 	lang := langCache.Get(update.Message.From.ID)
 
@@ -129,6 +129,16 @@ func NewOrder(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, 
 	var user models.User
 	if err := db.Where("telegram_id = ?", update.Message.From.ID).First(&user).Error; err != nil {
 		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(i18n.UserNotFound, lang))
+		return
+	}
+
+	// Проверяем права доступа (админы и мастера)
+	if user.Role != models.UserRoleAdmin && user.Role != models.UserRoleMaster {
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": "❌ У вас нет доступа к созданию заказов",
+			"uz": "❌ Sizda buyurtma yaratish huquqi yo'q",
+			"en": "❌ You don't have permission to create orders",
+		}, lang))
 		return
 	}
 

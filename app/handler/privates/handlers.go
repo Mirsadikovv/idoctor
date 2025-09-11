@@ -861,6 +861,11 @@ func saveOrderToDB(db *gorm.DB, orderData *models.OrderData, createdBy *models.U
 		WarrantyDays: 30, // 30 дней гарантии по умолчанию
 	}
 	
+	// Если создается мастером, автоматически назначаем его ответственным
+	if createdBy.Role == models.UserRoleMaster {
+		device.MasterID = &createdBy.ID
+	}
+	
 	if err := db.Create(&device).Error; err != nil {
 		log.Printf("Error creating device: %v", err)
 		return fmt.Errorf("ошибка создания устройства: %v", err)
