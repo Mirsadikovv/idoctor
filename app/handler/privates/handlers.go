@@ -286,6 +286,30 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 		} else {
 			answerCallback(bot, callback.ID, i18n.GetText(i18n.NoAccess, lang))
 		}
+	case "device":
+		if len(parts) >= 3 && parts[1] == "details" {
+			deviceID, err := strconv.ParseUint(parts[2], 10, 32)
+			if err != nil {
+				answerCallback(bot, callback.ID, i18n.GetText(i18n.InvalidOrderID, lang))
+				return
+			}
+			handleDeviceDetails(bot, callback, cfg, db, uint(deviceID), &user)
+		} else if len(parts) >= 4 && parts[1] == "status" && parts[2] == "change" {
+			deviceID, err := strconv.ParseUint(parts[3], 10, 32)
+			if err != nil {
+				answerCallback(bot, callback.ID, i18n.GetText(i18n.InvalidOrderID, lang))
+				return
+			}
+			handleDeviceStatusChangeMenu(bot, callback, cfg, db, uint(deviceID), &user)
+		} else if len(parts) >= 5 && parts[1] == "status" && parts[2] == "set" {
+			deviceID, err := strconv.ParseUint(parts[3], 10, 32)
+			if err != nil {
+				answerCallback(bot, callback.ID, i18n.GetText(i18n.InvalidOrderID, lang))
+				return
+			}
+			newStatus := parts[4]
+			handleDeviceStatusSet(bot, callback, cfg, db, uint(deviceID), newStatus, &user)
+		}
 	case "search":
 		handleSearchCallback(bot, callback, cfg, db, &user)
 	case "back_to_orders":
@@ -1050,6 +1074,167 @@ func showStatisticsMainMenu(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQue
 	}
 	
 	answerCallback(bot, callback.ID, "")
+}
+
+// handleDeviceStatusChangeMenu показывает меню выбора нового статуса
+func handleDeviceStatusChangeMenu(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, deviceID uint, user *models.User) {
+	lang := user.GetLanguage()
+
+	// Получаем устройство
+	var device models.Device
+	err := db.Where("id = ?", deviceID).First(&device).Error
+	if err != nil {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Устройство не найдено",
+			"uz": "❌ Qurilma topilmadi",
+			"en": "❌ Device not found",
+		}, lang))
+		return
+	}
+
+	// Проверяем права доступа
+	if user.Role != models.UserRoleAdmin && (device.MasterID == nil || *device.MasterID != user.ID) {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Нет доступа",
+			"uz": "❌ Ruxsat yo'q",
+			"en": "❌ Access denied",
+		}, lang))
+		return
+	}
+
+	messageText := fmt.Sprintf("%s #%d\n\n%s",
+		i18n.GetText(map[string]string{
+			"ru": "🔄 Изменение статуса заказа",
+			"uz": "🔄 Buyurtma statusini o'zgartirish",
+			"en": "🔄 Changing order status",
+		}, lang), device.ID,
+		i18n.GetText(map[string]string{
+			"ru": "Текущий статус: " + getDeviceStatusText(device.Status, lang) + "\n\nВыберите новый статус:",
+			"uz": "Joriy status: " + getDeviceStatusText(device.Status, lang) + "\n\nYangi statusni tanlang:",
+			"en": "Current status: " + getDeviceStatusText(device.Status, lang) + "\n\nSelect new status:",
+		}, lang))
+
+	// Создаем клавиатуру с вариантами статусов
+	keyboard := getStatusSelectionKeyboard(deviceID, lang)
+
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, messageText)
+	msg.ReplyMarkup = keyboard
+
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending status change menu: %v", err)
+	}
+
+	answerCallback(bot, callback.ID, "")
+}
+
+// handleDeviceStatusSet изменяет статус устройства
+func handleDeviceStatusSet(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, deviceID uint, newStatusStr string, user *models.User) {
+	lang := user.GetLanguage()
+
+	// Преобразуем строку в DeviceStatus
+	newStatus := models.DeviceStatus(newStatusStr)
+	if !newStatus.IsValid() {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Неверный статус",
+			"uz": "❌ Noto'g'ri status",
+			"en": "❌ Invalid status",
+		}, lang))
+		return
+	}
+
+	// Получаем устройство
+	var device models.Device
+	err := db.Where("id = ?", deviceID).First(&device).Error
+	if err != nil {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Устройство не найдено",
+			"uz": "❌ Qurilma topilmadi",
+			"en": "❌ Device not found",
+		}, lang))
+		return
+	}
+
+	// Проверяем права доступа
+	if user.Role != models.UserRoleAdmin && (device.MasterID == nil || *device.MasterID != user.ID) {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Нет доступа",
+			"uz": "❌ Ruxsat yo'q",
+			"en": "❌ Access denied",
+		}, lang))
+		return
+	}
+
+	// Обновляем статус
+	oldStatus := device.Status
+	device.Status = newStatus
+
+	// Устанавливаем CompletedAt если статус стал "completed"
+	if newStatus == models.DeviceStatusCompleted && oldStatus != models.DeviceStatusCompleted {
+		now := time.Now()
+		device.CompletedAt = &now
+	}
+
+	err = db.Save(&device).Error
+	if err != nil {
+		log.Printf("Error updating device status: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Ошибка обновления",
+			"uz": "❌ Yangilashda xatolik",
+			"en": "❌ Error updating",
+		}, lang))
+		return
+	}
+
+	// Отправляем подтверждение
+	messageText := fmt.Sprintf("%s\n\n✅ %s: %s",
+		i18n.GetText(map[string]string{
+			"ru": "✅ Статус успешно изменен!",
+			"uz": "✅ Status muvaffaqiyatli o'zgartirildi!",
+			"en": "✅ Status changed successfully!",
+		}, lang),
+		i18n.GetText(map[string]string{
+			"ru": "Новый статус",
+			"uz": "Yangi status",
+			"en": "New status",
+		}, lang), getDeviceStatusText(newStatus, lang))
+
+	// Кнопки для возврата
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(
+				i18n.GetText(map[string]string{
+					"ru": "🔍 К деталям",
+					"uz": "🔍 Tafsilotlarga",
+					"en": "🔍 To details",
+				}, lang),
+				fmt.Sprintf("device_details_%d", deviceID)),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(
+				i18n.GetText(map[string]string{
+					"ru": "🔙 К списку заказов",
+					"uz": "🔙 Buyurtmalar ro'yxatiga",
+					"en": "🔙 To orders list",
+				}, lang),
+				"devices_refresh"),
+		),
+	)
+
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, messageText)
+	msg.ReplyMarkup = keyboard
+
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending status update confirmation: %v", err)
+	}
+
+	// Логируем действие
+	log.Printf("User %s (ID: %d) changed status of device %d from %s to %s", user.Name, user.TelegramID, deviceID, oldStatus, newStatus)
+
+	answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+		"ru": "✅ Статус изменен",
+		"uz": "✅ Status o'zgartirildi",
+		"en": "✅ Status changed",
+	}, lang))
 }
 
 // showGeneralStatistics показывает общую статистику
@@ -2517,4 +2702,114 @@ func handleMastersListActiveCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.Ca
 func handleMastersAddCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
 	// Используем существующую функцию showAddMasterForm
 	showAddMasterForm(bot, callback, user, db)
+}
+
+// handleDeviceDetails показывает детали устройства с кнопками управления для мастеров
+func handleDeviceDetails(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, deviceID uint, user *models.User) {
+	lang := user.GetLanguage()
+
+	// Получаем устройство из базы данных
+	var device models.Device
+	err := db.Preload("Customer").Preload("Master").Where("id = ?", deviceID).First(&device).Error
+	if err != nil {
+		log.Printf("Error getting device details: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Устройство не найдено",
+			"uz": "❌ Qurilma topilmadi",
+			"en": "❌ Device not found",
+		}, lang))
+		return
+	}
+
+	// Проверяем права доступа
+	if user.Role != models.UserRoleAdmin && (device.MasterID == nil || *device.MasterID != user.ID) {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Нет доступа к этому заказу",
+			"uz": "❌ Bu buyurtmaga ruxsat yo'q",
+			"en": "❌ No access to this order",
+		}, lang))
+		return
+	}
+
+	// Формируем сообщение с деталями
+	messageText := fmt.Sprintf("%s #%d\n\n",
+		i18n.GetText(map[string]string{
+			"ru": "🔍 Детали заказа",
+			"uz": "🔍 Buyurtma tafsilotlari",
+			"en": "🔍 Order details",
+		}, lang), device.ID)
+
+	messageText += fmt.Sprintf("🆔 %s: `%s`\n",
+		i18n.GetText(map[string]string{
+			"ru": "Код",
+			"uz": "Kod",
+			"en": "Code",
+		}, lang), device.Code)
+
+	messageText += fmt.Sprintf("📱 %s: %s %s\n",
+		i18n.GetText(map[string]string{
+			"ru": "Устройство",
+			"uz": "Qurilma",
+			"en": "Device",
+		}, lang), device.Brand, device.Model)
+
+	if device.Customer != nil {
+		messageText += fmt.Sprintf("👤 %s: %s\n",
+			i18n.GetText(map[string]string{
+				"ru": "Клиент",
+				"uz": "Mijoz",
+				"en": "Customer",
+			}, lang), device.Customer.Name)
+
+		if device.Customer.Phone != "" {
+			messageText += fmt.Sprintf("📞 %s\n", device.Customer.Phone)
+		}
+	}
+
+	if device.Master != nil {
+		messageText += fmt.Sprintf("🔧 %s: %s\n",
+			i18n.GetText(map[string]string{
+				"ru": "Мастер",
+				"uz": "Usta",
+				"en": "Master",
+			}, lang), device.Master.FullName())
+	}
+
+	messageText += fmt.Sprintf("⚡️ %s: %s\n",
+		i18n.GetText(map[string]string{
+			"ru": "Статус",
+			"uz": "Status",
+			"en": "Status",
+		}, lang), getDeviceStatusText(device.Status, lang))
+
+	if device.RepairCost > 0 {
+		messageText += fmt.Sprintf("💰 %s: %.0f сум\n",
+			i18n.GetText(map[string]string{
+				"ru": "Стоимость ремонта",
+				"uz": "Ta'mirlash narxi",
+				"en": "Repair cost",
+			}, lang), device.RepairCost)
+	}
+
+	if device.Problem != "" {
+		messageText += fmt.Sprintf("\n🔍 %s:\n%s\n",
+			i18n.GetText(map[string]string{
+				"ru": "Описание проблемы",
+				"uz": "Muammo tavsifi",
+				"en": "Problem description",
+			}, lang), device.Problem)
+	}
+
+	// Создаем клавиатуру с кнопками управления
+	keyboard := getDeviceManagementKeyboard(&device, user, lang)
+
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, messageText)
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = keyboard
+
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending device details: %v", err)
+	}
+
+	answerCallback(bot, callback.ID, "")
 }

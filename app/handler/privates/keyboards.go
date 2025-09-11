@@ -483,6 +483,115 @@ func getMasterAssignKeyboard(deviceID uint, masters []models.User, lang string) 
 	return tgbotapi.NewInlineKeyboardMarkup(buttons...)
 }
 
+// getDeviceManagementKeyboard возвращает клавиатуру управления заказом для мастеров
+func getDeviceManagementKeyboard(device *models.Device, user *models.User, lang string) tgbotapi.InlineKeyboardMarkup {
+	var buttons [][]tgbotapi.InlineKeyboardButton
+
+	// Кнопка смены статуса (для мастеров и админов)
+	if user.Role == models.UserRoleAdmin || (user.Role == models.UserRoleMaster && device.MasterID != nil && *device.MasterID == user.ID) {
+		buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
+			tgbotapi.NewInlineKeyboardButtonData(
+				getText(map[string]string{
+					"ru": "🔄 Изменить статус",
+					"uz": "🔄 Statusni o'zgartirish",
+					"en": "🔄 Change status",
+				}, lang),
+				fmt.Sprintf("device_status_change_%d", device.ID)),
+		})
+	}
+
+	// Кнопка установки цены (для админов)
+	if user.Role == models.UserRoleAdmin {
+		buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
+			tgbotapi.NewInlineKeyboardButtonData(
+				getText(map[string]string{
+					"ru": "💰 Установить цену",
+					"uz": "💰 Narx belgilash",
+					"en": "💰 Set price",
+				}, lang),
+				fmt.Sprintf("device_price_set_%d", device.ID)),
+		})
+	}
+
+	// Кнопка возврата к списку
+	buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData(
+			getText(map[string]string{
+				"ru": "🔙 Назад к списку",
+				"uz": "🔙 Ro'yxatga qaytish",
+				"en": "🔙 Back to list",
+			}, lang),
+			"devices_refresh"),
+	})
+
+	return tgbotapi.NewInlineKeyboardMarkup(buttons...)
+}
+
+// getStatusSelectionKeyboard возвращает клавиатуру выбора статуса устройства
+func getStatusSelectionKeyboard(deviceID uint, lang string) tgbotapi.InlineKeyboardMarkup {
+	buttons := [][]tgbotapi.InlineKeyboardButton{
+		{
+			tgbotapi.NewInlineKeyboardButtonData(
+				getText(map[string]string{
+					"ru": "🆕 Принят",
+					"uz": "🆕 Qabul qilingan",
+					"en": "🆕 Received",
+				}, lang),
+				fmt.Sprintf("device_status_set_%d_received", deviceID)),
+			tgbotapi.NewInlineKeyboardButtonData(
+				getText(map[string]string{
+					"ru": "🔧 В работе",
+					"uz": "🔧 Ishlanmoqda",
+					"en": "🔧 In progress",
+				}, lang),
+				fmt.Sprintf("device_status_set_%d_in_progress", deviceID)),
+		},
+		{
+			tgbotapi.NewInlineKeyboardButtonData(
+				getText(map[string]string{
+					"ru": "⏳ Ожидание запчастей",
+					"uz": "⏳ Ehtiyot qismlar kutilmoqda",
+					"en": "⏳ Waiting parts",
+				}, lang),
+				fmt.Sprintf("device_status_set_%d_waiting_parts", deviceID)),
+			tgbotapi.NewInlineKeyboardButtonData(
+				getText(map[string]string{
+					"ru": "✅ Готов",
+					"uz": "✅ Tayyor",
+					"en": "✅ Ready",
+				}, lang),
+				fmt.Sprintf("device_status_set_%d_ready", deviceID)),
+		},
+		{
+			tgbotapi.NewInlineKeyboardButtonData(
+				getText(map[string]string{
+					"ru": "📦 Выдан",
+					"uz": "📦 Berilgan",
+					"en": "📦 Completed",
+				}, lang),
+				fmt.Sprintf("device_status_set_%d_completed", deviceID)),
+			tgbotapi.NewInlineKeyboardButtonData(
+				getText(map[string]string{
+					"ru": "❌ Отменен",
+					"uz": "❌ Bekor qilingan",
+					"en": "❌ Cancelled",
+				}, lang),
+				fmt.Sprintf("device_status_set_%d_cancelled", deviceID)),
+		},
+		{
+			tgbotapi.NewInlineKeyboardButtonData(
+				getText(map[string]string{
+					"ru": "🔙 Назад",
+					"uz": "🔙 Orqaga",
+					"en": "🔙 Back",
+				}, lang),
+				fmt.Sprintf("device_details_%d", deviceID)),
+		},
+	}
+
+	return tgbotapi.NewInlineKeyboardMarkup(buttons...)
+}
+
 // getText - вспомогательная функция для получения локализованного текста
 func getText(texts map[string]string, lang string) string {
 	if text, exists := texts[lang]; exists {
