@@ -158,11 +158,9 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 		"main_menu", "back_to_masters", "back_to_orders", "back_to_stats",
 		"all_orders", "new_order", "main_masters", "analytics", "search", "my_orders",
 		"stats_general", "stats_masters", "stats_refresh", "masters_refresh",
-		"masters_add", "status_received", "status_in_progress", "status_waiting_parts",
-		"status_ready", "status_completed", "status_cancelled", "help_contact",
-		"orders_refresh", "masters_list_all", "masters_list_active",
+		"masters_add", "help_contact", "orders_refresh", "masters_list_all", "masters_list_active",
 		"stats_period_today", "stats_period_yesterday", "stats_period_week", 
-		"stats_period_month", "stats_period_year", "stats_period_all_time",
+		"stats_period_month", "stats_period_year", "stats_period_all_time", "devices_refresh",
 	}
 	
 	for _, callback := range simpleCallbacks {
@@ -314,12 +312,12 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 		handleSearchCallback(bot, callback, cfg, db, &user)
 	case "back_to_orders":
 		handleBackToOrdersCallback(bot, callback, cfg, db, &user)
-	case "status_received", "status_in_progress", "status_waiting_parts", "status_ready", "status_completed", "status_cancelled":
-		handleStatusSetCallback(bot, callback, cfg, db, &user, action)
 	case "help_contact":
 		handleHelpContactCallback(bot, callback, &user)
 	case "orders_refresh":
 		handleOrdersRefreshCallback(bot, callback, cfg, db, &user)
+	case "devices_refresh":
+		handleMyOrdersCallback(bot, callback, cfg, db, &user)
 	default:
 		// Проверяем составные callback data
 		if strings.HasPrefix(action, "change_status_") {
@@ -363,6 +361,24 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 		} else if strings.HasPrefix(action, "master_action_") {
 			// Обрабатываем master_action_* callback data
 			handleMasterActionCallback(bot, callback, cfg, db, &user, action)
+		} else if strings.HasPrefix(data, "device_status_set_") {
+			// Обработка device_status_set_<deviceID>_<status>
+			log.Printf("Processing device_status_set callback: data='%s'", data)
+			parts := strings.Split(data, "_")
+			log.Printf("Parsed parts: %v, len=%d", parts, len(parts))
+			if len(parts) >= 5 {
+				deviceID, err := strconv.ParseUint(parts[3], 10, 32)
+				if err != nil {
+					answerCallback(bot, callback.ID, i18n.GetText(i18n.InvalidOrderID, lang))
+					return
+				}
+				newStatus := parts[4]
+				log.Printf("Calling handleDeviceStatusSet with deviceID=%d, status='%s'", uint(deviceID), newStatus)
+				handleDeviceStatusSet(bot, callback, cfg, db, uint(deviceID), newStatus, &user)
+			} else {
+				log.Printf("Invalid device_status_set format: expected >=5 parts, got %d", len(parts))
+				answerCallback(bot, callback.ID, i18n.GetText(i18n.InvalidDataFormat, lang))
+			}
 		} else {
 			answerCallback(bot, callback.ID, i18n.GetText(i18n.UnknownAction, lang))
 		}
@@ -1130,6 +1146,9 @@ func handleDeviceStatusChangeMenu(bot *tgbotapi.BotAPI, callback *tgbotapi.Callb
 // handleDeviceStatusSet изменяет статус устройства
 func handleDeviceStatusSet(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, deviceID uint, newStatusStr string, user *models.User) {
 	lang := user.GetLanguage()
+
+	// Отладочная информация
+	log.Printf("handleDeviceStatusSet called: deviceID=%d, newStatusStr='%s', userID=%d", deviceID, newStatusStr, user.TelegramID)
 
 	// Преобразуем строку в DeviceStatus
 	newStatus := models.DeviceStatus(newStatusStr)
