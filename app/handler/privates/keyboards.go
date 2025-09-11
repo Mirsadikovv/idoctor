@@ -35,9 +35,10 @@ func getMainKeyboard(isAdmin bool, lang string) tgbotapi.ReplyKeyboardMarkup {
 		buttons = [][]tgbotapi.KeyboardButton{
 			{
 				tgbotapi.NewKeyboardButton(i18n.GetButton("my_orders", lang)),
-				tgbotapi.NewKeyboardButton(i18n.GetButton("search", lang)),
+				tgbotapi.NewKeyboardButton(i18n.GetButton("new_order", lang)),
 			},
 			{
+				tgbotapi.NewKeyboardButton(i18n.GetButton("search", lang)),
 				tgbotapi.NewKeyboardButton(i18n.GetButton("menu", lang)),
 			},
 			{
@@ -72,6 +73,9 @@ func getMainInlineKeyboard(isAdmin bool, lang string) tgbotapi.InlineKeyboardMar
 		buttons = [][]tgbotapi.InlineKeyboardButton{
 			{
 				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("my_orders", lang), "my_orders"),
+				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("new_order", lang), "new_order"),
+			},
+			{
 				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("search", lang), "search"),
 			},
 		}

@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"log"
+	"math/rand"
 
 	"idoctor-bot/app/api"
 	"idoctor-bot/app/config"
@@ -25,39 +26,39 @@ func MyOrders(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, 
 		return
 	}
 
-	if cfg.API.Enabled {
-		// Используем API
-		apiClient := api.NewAPIClient(cfg.API.BaseURL, cfg.API.APIKey)
-		devices, err := apiClient.GetDevicesByMaster(user.ID)
-		if err != nil {
-			log.Printf("Error getting devices from API: %v", err)
-			sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
-				"ru": "❌ Ошибка получения данных",
-				"uz": "❌ Ma'lumotlarni olishda xatolik",
-				"en": "❌ Error getting data",
-			}, lang))
-			return
-		}
+	// Работаем с локальной базой данных
+	var devices []models.Device
+	var err error
 
-		if len(devices) == 0 {
-			sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
-				"ru": "📋 У вас пока нет заказов",
-				"uz": "📋 Sizda hozircha buyurtmalar yo'q",
-				"en": "📋 You don't have any orders yet",
-			}, lang))
-			return
-		}
-
-		// Отправляем список заказов с inline кнопками
-		sendOrdersList(bot, update.Message.Chat.ID, devices, lang, false)
+	if user.Role == models.UserRoleAdmin {
+		// Админ видит все заказы
+		err = db.Preload("Customer").Preload("Master").Find(&devices).Error
 	} else {
-		// Заглушка
-		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
-			"ru": "📋 Ваши заказы (функция в разработке)",
-			"uz": "Sizning buyurtmalaringiz (funksiya ishlab chiqilmoqda)",
-			"en": "Your orders (function in development)",
-		}, lang))
+		// Мастер видит только свои заказы
+		err = db.Preload("Customer").Preload("Master").Where("master_id = ?", user.ID).Find(&devices).Error
 	}
+
+	if err != nil {
+		log.Printf("Error getting devices from database: %v", err)
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Ошибка получения данных",
+			"uz": "❌ Ma'lumotlarni olishda xatolik",
+			"en": "❌ Error getting data",
+		}, lang))
+		return
+	}
+
+	if len(devices) == 0 {
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": "📋 У вас пока нет заказов",
+			"uz": "📋 Sizda hozircha buyurtmalar yo'q",
+			"en": "📋 You don't have any orders yet",
+		}, lang))
+		return
+	}
+
+	// Отправляем список заказов
+	sendDevicesList(bot, update.Message.Chat.ID, devices, lang, user.Role == models.UserRoleAdmin)
 }
 
 // AllOrders показывает все заказы (только для админов)
@@ -801,6 +802,169 @@ func sendOrdersList(bot *tgbotapi.BotAPI, chatID int64, devices []api.Device, la
 			break // Показываем только первую страницу, остальные по запросу
 		}
 	}
+}
+
+// sendDevicesList отправляет список устройств с интерактивными кнопками
+func sendDevicesList(bot *tgbotapi.BotAPI, chatID int64, devices []models.Device, lang string, isAdmin bool) {
+	if len(devices) == 0 {
+		message := i18n.GetText(map[string]string{
+			"ru": "📋 Нет заказов для отображения",
+			"uz": "📋 Ko'rsatish uchun buyurtmalar yo'q",
+			"en": "📋 No orders to display",
+		}, lang)
+		msg := tgbotapi.NewMessage(chatID, message)
+		bot.Send(msg)
+		return
+	}
+
+	// Пагинация - показываем по 5 заказов
+	pageSize := 5
+	for page := 0; page*pageSize < len(devices); page++ {
+		start := page * pageSize
+		end := start + pageSize
+		if end > len(devices) {
+			end = len(devices)
+		}
+
+		pageDevices := devices[start:end]
+		messageText := ""
+		if page == 0 {
+			messageText = i18n.GetText(map[string]string{
+				"ru": "📋 Заказы:",
+				"uz": "📋 Buyurtmalar:",
+				"en": "📋 Orders:",
+			}, lang) + "\n\n"
+		}
+
+		// Создаем inline клавиатуру
+		var keyboard [][]tgbotapi.InlineKeyboardButton
+
+		for i, device := range pageDevices {
+			status := getDeviceStatusText(device.Status, lang)
+			deviceText := fmt.Sprintf("%d. %s %s\n⚡️ %s\n",
+				start+i+1, device.Brand, device.Model, status)
+
+			if device.RepairCost > 0 {
+				deviceText += fmt.Sprintf("💰 %.0f сум\n", device.RepairCost)
+			}
+
+			if device.Customer != nil {
+				deviceText += fmt.Sprintf("👤 %s\n", device.Customer.Name)
+			}
+
+			messageText += deviceText + "\n"
+
+			// Кнопка для детального просмотра
+			buttonText := fmt.Sprintf("#%d - %s %s", device.ID, device.Brand, device.Model)
+			if len(buttonText) > 60 {
+				buttonText = buttonText[:57] + "..."
+			}
+
+			keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{
+				tgbotapi.NewInlineKeyboardButtonData(buttonText, fmt.Sprintf("device_details_%d", device.ID)),
+			})
+		}
+
+		// Добавляем кнопки управления если есть несколько страниц
+		if len(devices) > pageSize {
+			var paginationRow []tgbotapi.InlineKeyboardButton
+			if page > 0 {
+				paginationRow = append(paginationRow, tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", fmt.Sprintf("devices_page_%d", page-1)))
+			}
+			if end < len(devices) {
+				paginationRow = append(paginationRow, tgbotapi.NewInlineKeyboardButtonData("Далее ▶️", fmt.Sprintf("devices_page_%d", page+1)))
+			}
+			if len(paginationRow) > 0 {
+				keyboard = append(keyboard, paginationRow)
+			}
+		}
+
+		// Добавляем кнопку обновления
+		keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{
+			tgbotapi.NewInlineKeyboardButtonData(
+				i18n.GetText(map[string]string{
+					"ru": "🔄 Обновить",
+					"uz": "🔄 Yangilash",
+					"en": "🔄 Refresh",
+				}, lang),
+				"devices_refresh"),
+		})
+
+		msg := tgbotapi.NewMessage(chatID, messageText)
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(keyboard...)
+
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending devices page: %v", err)
+		}
+
+		// Если это первая страница из нескольких, делаем небольшую паузу
+		if page == 0 && len(devices) > pageSize {
+			break // Показываем только первую страницу, остальные по запросу
+		}
+	}
+}
+
+func getDeviceStatusText(status models.DeviceStatus, lang string) string {
+	statusMap := map[models.DeviceStatus]map[string]string{
+		models.DeviceStatusReceived: {
+			"ru": "🆕 Принят",
+			"uz": "🆕 Qabul qilindi",
+			"en": "🆕 Received",
+		},
+		models.DeviceStatusInProgress: {
+			"ru": "🔧 В работе",
+			"uz": "🔧 Ishlanmoqda",
+			"en": "🔧 In progress",
+		},
+		models.DeviceStatusWaitingParts: {
+			"ru": "⏳ Ожидание запчастей",
+			"uz": "⏳ Ehtiyot qismlar kutilmoqda",
+			"en": "⏳ Waiting for parts",
+		},
+		models.DeviceStatusReady: {
+			"ru": "✅ Готов",
+			"uz": "✅ Tayyor",
+			"en": "✅ Ready",
+		},
+		models.DeviceStatusCompleted: {
+			"ru": "📦 Выдан",
+			"uz": "📦 Berildi",
+			"en": "📦 Completed",
+		},
+		models.DeviceStatusCancelled: {
+			"ru": "❌ Отменен",
+			"uz": "❌ Bekor qilindi",
+			"en": "❌ Cancelled",
+		},
+	}
+
+	if statusTexts, exists := statusMap[status]; exists {
+		if text, exists := statusTexts[lang]; exists {
+			return text
+		}
+		return statusTexts["ru"] // fallback
+	}
+	return status.String() // fallback
+}
+
+// generateOrderCode генерирует уникальный код заказа
+func generateOrderCode(db *gorm.DB) (string, error) {
+	var code string
+	for i := 0; i < 10; i++ { // Максимум 10 попыток
+		// Генерация кода: формат ID-XXXX (например, ID-1234)
+		code = fmt.Sprintf("ID-%04d", rand.Intn(10000))
+		
+		// Проверяем уникальность
+		var exists bool
+		err := db.Model(&models.Device{}).Select("count(*) > 0").Where("code = ?", code).Find(&exists).Error
+		if err != nil {
+			return "", err
+		}
+		if !exists {
+			return code, nil
+		}
+	}
+	return "", fmt.Errorf("не удалось сгенерировать уникальный код")
 }
 
 func getStatusText(status string, lang string) string {

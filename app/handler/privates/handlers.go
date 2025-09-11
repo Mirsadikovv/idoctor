@@ -93,7 +93,7 @@ func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Conf
 				MyOrders(bot, update, cfg, db, langCache)
 			}
 		case i18n.GetButton("new_order", lang):
-			if utils.IsAdmin(update.Message.From.ID, cfg) {
+			if user.Role == models.UserRoleAdmin || user.Role == models.UserRoleMaster {
 				NewOrder(bot, update, cfg, db, langCache)
 			} else {
 				sendMessage(bot, update.Message.Chat.ID, i18n.GetText(i18n.NoAccess, lang))
@@ -842,7 +842,7 @@ func saveOrderToDB(db *gorm.DB, orderData *models.OrderData, createdBy *models.U
 	}
 	
 	// 2. Генерируем уникальный код заказа
-	orderCode, err := generateUniqueOrderCode(db)
+	orderCode, err := generateOrderCode(db)
 	if err != nil {
 		log.Printf("Error generating order code: %v", err)
 		return fmt.Errorf("ошибка генерации кода заказа: %v", err)
