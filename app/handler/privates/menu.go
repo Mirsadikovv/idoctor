@@ -22,7 +22,7 @@ func Menu(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *
 	langCache.Set(update.Message.From.ID, lang)
 
 	welcomeMessage := i18n.GetText(i18n.WelcomeMessage, lang) + "\n\n"
-	
+
 	if user.Role == models.UserRoleAdmin {
 		welcomeMessage += i18n.GetText(i18n.AdminWelcome, lang) + "\n\n"
 	} else {
@@ -41,7 +41,7 @@ func Menu(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *
 
 func Help(bot *tgbotapi.BotAPI, update tgbotapi.Update, langCache *i18n.LanguageCache) {
 	lang := langCache.Get(update.Message.From.ID)
-	
+
 	// Создаем inline клавиатуру для дополнительных опций
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -65,7 +65,7 @@ func Help(bot *tgbotapi.BotAPI, update tgbotapi.Update, langCache *i18n.Language
 			),
 		),
 	)
-	
+
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, i18n.GetText(i18n.HelpText, lang))
 	msg.ParseMode = "Markdown"
 	msg.ReplyMarkup = keyboard

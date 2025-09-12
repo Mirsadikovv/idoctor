@@ -22,7 +22,7 @@ func NotifyAdmins(bot *tgbotapi.BotAPI, cfg *config.Config) {
 		if idStr == "" {
 			continue
 		}
-		
+
 		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
 			log.Printf("Invalid admin ID: %v", err)
@@ -44,12 +44,12 @@ func IsAdmin(userID int64, cfg *config.Config) bool {
 		if idStr == "" {
 			continue
 		}
-		
+
 		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
 			continue
 		}
-		
+
 		if id == userID {
 			return true
 		}

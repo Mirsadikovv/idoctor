@@ -3,10 +3,10 @@ package main
 import (
 	"log"
 
-	"idoctor-bot/app/bot"
-	"idoctor-bot/app/config"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"idoctor-bot/app/bot"
+	"idoctor-bot/app/config"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func main() {
 	sqlDB.SetConnMaxLifetime(cfg.Database.ConnectionMaxLifetime)
 
 	log.Println("Запуск Telegram бота для ремонтной мастерской...")
-	
+
 	if err := bot.Start(cfg, db); err != nil {
 		log.Fatal("Ошибка запуска бота:", err)
 	}

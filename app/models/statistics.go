@@ -27,18 +27,18 @@ type MasterStatistics struct {
 
 // PeriodStatistics содержит статистику за определенный период
 type PeriodStatistics struct {
-	Period            string                   `json:"period"`
-	StartDate         time.Time                `json:"start_date"`
-	EndDate           time.Time                `json:"end_date"`
-	TotalOrders       int                      `json:"total_orders"`
-	CompletedOrders   int                      `json:"completed_orders"`
-	CancelledOrders   int                      `json:"cancelled_orders"`
-	TotalRevenue      float64                  `json:"total_revenue"`
-	AverageOrderValue float64                  `json:"average_order_value"`
-	OrdersByStatus    map[DeviceStatus]int     `json:"orders_by_status"`
-	OrdersByMaster    map[uint]int             `json:"orders_by_master"`
-	TopBrands         map[string]int           `json:"top_brands"`
-	ProblemTypes      map[string]int           `json:"problem_types"`
+	Period            string               `json:"period"`
+	StartDate         time.Time            `json:"start_date"`
+	EndDate           time.Time            `json:"end_date"`
+	TotalOrders       int                  `json:"total_orders"`
+	CompletedOrders   int                  `json:"completed_orders"`
+	CancelledOrders   int                  `json:"cancelled_orders"`
+	TotalRevenue      float64              `json:"total_revenue"`
+	AverageOrderValue float64              `json:"average_order_value"`
+	OrdersByStatus    map[DeviceStatus]int `json:"orders_by_status"`
+	OrdersByMaster    map[uint]int         `json:"orders_by_master"`
+	TopBrands         map[string]int       `json:"top_brands"`
+	ProblemTypes      map[string]int       `json:"problem_types"`
 }
 
 // StatisticsPeriod определяет периоды для статистики
@@ -118,19 +118,19 @@ func (p StatisticsPeriod) GetName(lang string) string {
 // GetPeriodDates возвращает даты начала и окончания периода
 func (p StatisticsPeriod) GetPeriodDates() (time.Time, time.Time) {
 	now := time.Now()
-	
+
 	switch p {
 	case PeriodToday:
 		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 		end := start.AddDate(0, 0, 1).Add(-time.Nanosecond)
 		return start, end
-		
+
 	case PeriodYesterday:
 		yesterday := now.AddDate(0, 0, -1)
 		start := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, yesterday.Location())
 		end := start.AddDate(0, 0, 1).Add(-time.Nanosecond)
 		return start, end
-		
+
 	case PeriodWeek:
 		// Начало недели (понедельник)
 		weekday := int(now.Weekday())
@@ -141,22 +141,22 @@ func (p StatisticsPeriod) GetPeriodDates() (time.Time, time.Time) {
 		start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
 		end := start.AddDate(0, 0, 7).Add(-time.Nanosecond)
 		return start, end
-		
+
 	case PeriodMonth:
 		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 		end := start.AddDate(0, 1, 0).Add(-time.Nanosecond)
 		return start, end
-		
+
 	case PeriodYear:
 		start := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
 		end := start.AddDate(1, 0, 0).Add(-time.Nanosecond)
 		return start, end
-		
+
 	case PeriodAllTime:
 		start := time.Date(2020, 1, 1, 0, 0, 0, 0, now.Location()) // Начало времен для системы
 		end := now
 		return start, end
-		
+
 	default:
 		return now, now
 	}

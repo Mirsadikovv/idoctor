@@ -29,7 +29,7 @@ func Start(cfg *config.Config, db *gorm.DB) error {
 
 	// Инициализация кэша языков
 	langCache := i18n.NewLanguageCache()
-	
+
 	// Загружаем языки пользователей из базы данных
 	var users []models.User
 	if err := db.Find(&users).Error; err == nil {

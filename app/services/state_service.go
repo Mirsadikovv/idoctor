@@ -2,8 +2,8 @@ package services
 
 import (
 	"encoding/json"
-	"idoctor-bot/app/models"
 	"gorm.io/gorm"
+	"idoctor-bot/app/models"
 )
 
 type StateService struct {

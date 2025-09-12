@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"fmt"
-	
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"idoctor-bot/app/i18n"
 	"idoctor-bot/app/models"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 func getMainKeyboard(isAdmin bool, lang string) tgbotapi.ReplyKeyboardMarkup {
@@ -309,27 +309,27 @@ func getMastersMainKeyboard(lang string) tgbotapi.InlineKeyboardMarkup {
 // getMasterListKeyboard возвращает клавиатуру для списка мастеров
 func getMasterListKeyboard(masters []models.User, lang string) tgbotapi.InlineKeyboardMarkup {
 	var buttons [][]tgbotapi.InlineKeyboardButton
-	
+
 	// Добавляем кнопки для каждого мастера (максимум 8 для читаемости)
 	maxMasters := len(masters)
 	if maxMasters > 8 {
 		maxMasters = 8
 	}
-	
+
 	for i := 0; i < maxMasters; i += 2 {
 		var row []tgbotapi.InlineKeyboardButton
-		
+
 		// Первый мастер в ряду
 		master := masters[i]
 		statusIcon := "✅"
 		if !master.IsActive {
 			statusIcon = "❌"
 		}
-		
+
 		row = append(row, tgbotapi.NewInlineKeyboardButtonData(
 			fmt.Sprintf("%s %s", statusIcon, master.FullName()),
 			fmt.Sprintf("master_action_profile_%d", master.ID)))
-		
+
 		// Второй мастер в ряду (если есть)
 		if i+1 < maxMasters {
 			master2 := masters[i+1]
@@ -337,15 +337,15 @@ func getMasterListKeyboard(masters []models.User, lang string) tgbotapi.InlineKe
 			if !master2.IsActive {
 				statusIcon2 = "❌"
 			}
-			
+
 			row = append(row, tgbotapi.NewInlineKeyboardButtonData(
 				fmt.Sprintf("%s %s", statusIcon2, master2.FullName()),
 				fmt.Sprintf("master_action_profile_%d", master2.ID)))
 		}
-		
+
 		buttons = append(buttons, row)
 	}
-	
+
 	// Кнопки навигации и управления
 	buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
 		tgbotapi.NewInlineKeyboardButtonData(
@@ -363,7 +363,7 @@ func getMasterListKeyboard(masters []models.User, lang string) tgbotapi.InlineKe
 			}, lang),
 			"stats_masters"),
 	})
-	
+
 	buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
 		tgbotapi.NewInlineKeyboardButtonData(
 			getText(map[string]string{
@@ -387,14 +387,14 @@ func getMasterListKeyboard(masters []models.User, lang string) tgbotapi.InlineKe
 // getMasterProfileKeyboard возвращает клавиатуру для профиля мастера
 func getMasterProfileKeyboard(masterID uint, isActive bool, lang string) tgbotapi.InlineKeyboardMarkup {
 	var buttons [][]tgbotapi.InlineKeyboardButton
-	
+
 	// Кнопка изменения статуса
 	statusText := getText(map[string]string{
 		"ru": "❌ Деактивировать",
 		"uz": "❌ Faolsizlantirish",
 		"en": "❌ Deactivate",
 	}, lang)
-	
+
 	if !isActive {
 		statusText = getText(map[string]string{
 			"ru": "✅ Активировать",
@@ -402,7 +402,7 @@ func getMasterProfileKeyboard(masterID uint, isActive bool, lang string) tgbotap
 			"en": "✅ Activate",
 		}, lang)
 	}
-	
+
 	buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
 		tgbotapi.NewInlineKeyboardButtonData(statusText, fmt.Sprintf("master_action_toggle_%d", masterID)),
 		tgbotapi.NewInlineKeyboardButtonData(
@@ -413,7 +413,7 @@ func getMasterProfileKeyboard(masterID uint, isActive bool, lang string) tgbotap
 			}, lang),
 			fmt.Sprintf("master_action_orders_%d", masterID)),
 	})
-	
+
 	// Кнопки навигации
 	buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
 		tgbotapi.NewInlineKeyboardButtonData(
@@ -431,7 +431,7 @@ func getMasterProfileKeyboard(masterID uint, isActive bool, lang string) tgbotap
 			}, lang),
 			"masters_list_all"),
 	})
-	
+
 	buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
 		tgbotapi.NewInlineKeyboardButtonData(
 			getText(map[string]string{
@@ -455,20 +455,20 @@ func getMasterProfileKeyboard(masterID uint, isActive bool, lang string) tgbotap
 // getMasterAssignKeyboard возвращает клавиатуру для назначения мастера на заказ
 func getMasterAssignKeyboard(deviceID uint, masters []models.User, lang string) tgbotapi.InlineKeyboardMarkup {
 	var buttons [][]tgbotapi.InlineKeyboardButton
-	
+
 	// Добавляем кнопки для каждого активного мастера
 	for _, master := range masters {
 		if !master.IsActive {
 			continue // Пропускаем неактивных мастеров
 		}
-		
+
 		buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
 			tgbotapi.NewInlineKeyboardButtonData(
 				fmt.Sprintf("👨‍🔧 %s", master.FullName()),
 				fmt.Sprintf("assign_master_%d_%d", deviceID, master.ID)),
 		})
 	}
-	
+
 	// Кнопка отмены
 	buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
 		tgbotapi.NewInlineKeyboardButtonData(

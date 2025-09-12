@@ -5,7 +5,7 @@ import (
 )
 
 type LanguageCache struct {
-	mu       sync.RWMutex
+	mu        sync.RWMutex
 	languages map[int64]string
 }
 

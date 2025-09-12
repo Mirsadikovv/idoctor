@@ -7,16 +7,16 @@ import (
 )
 
 type Part struct {
-	ID          uint    `gorm:"primaryKey" json:"id"`
-	Name        string  `gorm:"size:200;not null" json:"name"`
-	Description string  `gorm:"type:text" json:"description"`
-	SKU         string  `gorm:"size:100;uniqueIndex" json:"sku"`
-	Price       float64 `gorm:"type:decimal(10,2);not null" json:"price"`
-	Quantity    int     `gorm:"default:0" json:"quantity"`
-	MinQuantity int     `gorm:"default:0" json:"min_quantity"`
-	Category    string  `gorm:"size:100" json:"category"`
-	Supplier    string  `gorm:"size:200" json:"supplier"`
-	IsActive    bool    `gorm:"default:true" json:"is_active"`
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	Name        string    `gorm:"size:200;not null" json:"name"`
+	Description string    `gorm:"type:text" json:"description"`
+	SKU         string    `gorm:"size:100;uniqueIndex" json:"sku"`
+	Price       float64   `gorm:"type:decimal(10,2);not null" json:"price"`
+	Quantity    int       `gorm:"default:0" json:"quantity"`
+	MinQuantity int       `gorm:"default:0" json:"min_quantity"`
+	Category    string    `gorm:"size:100" json:"category"`
+	Supplier    string    `gorm:"size:200" json:"supplier"`
+	IsActive    bool      `gorm:"default:true" json:"is_active"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 

@@ -28,17 +28,17 @@ func NewAPIClient(baseURL, apiKey string) *APIClient {
 
 // Device представляет устройство в системе
 type Device struct {
-	ID           uint   `json:"id"`
-	CustomerID   uint   `json:"customer_id"`
-	MasterID     *uint  `json:"master_id"`
-	Model        string `json:"model"`
-	Brand        string `json:"brand"`
-	SerialNumber string `json:"serial_number"`
-	Issue        string `json:"issue"`
-	Status       string `json:"status"`
+	ID           uint     `json:"id"`
+	CustomerID   uint     `json:"customer_id"`
+	MasterID     *uint    `json:"master_id"`
+	Model        string   `json:"model"`
+	Brand        string   `json:"brand"`
+	SerialNumber string   `json:"serial_number"`
+	Issue        string   `json:"issue"`
+	Status       string   `json:"status"`
 	Price        *float64 `json:"price"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
+	CreatedAt    string   `json:"created_at"`
+	UpdatedAt    string   `json:"updated_at"`
 	// Связи
 	Customer *Customer `json:"customer,omitempty"`
 	Master   *User     `json:"master,omitempty"`
@@ -68,33 +68,33 @@ func (c *APIClient) GetDevices() ([]Device, error) {
 	if c.baseURL == "http://localhost:8080" {
 		return c.getMockDevices(), nil
 	}
-	
+
 	url := fmt.Sprintf("%s/api/v1/devices", c.baseURL)
-	
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
-	
+
 	var devices []Device
 	if err := json.NewDecoder(resp.Body).Decode(&devices); err != nil {
 		return nil, err
 	}
-	
+
 	return devices, nil
 }
 
@@ -111,33 +111,33 @@ func (c *APIClient) GetDevicesByMaster(masterID uint) ([]Device, error) {
 		}
 		return masterDevices, nil
 	}
-	
+
 	url := fmt.Sprintf("%s/api/v1/devices?master_id=%d", c.baseURL, masterID)
-	
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
-	
+
 	var devices []Device
 	if err := json.NewDecoder(resp.Body).Decode(&devices); err != nil {
 		return nil, err
 	}
-	
+
 	return devices, nil
 }
 
@@ -148,35 +148,35 @@ func (c *APIClient) UpdateDeviceStatus(deviceID uint, status string) error {
 		// Мок - просто возвращаем успех
 		return nil
 	}
-	
+
 	url := fmt.Sprintf("%s/api/v1/devices/%d/status", c.baseURL, deviceID)
-	
+
 	payload := map[string]string{"status": status}
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	
+
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return err
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
-	
+
 	return nil
 }
 
@@ -186,7 +186,7 @@ func (c *APIClient) getMockDevices() []Device {
 	price2 := 75000.0
 	masterID1 := uint(1)
 	masterID2 := uint(2)
-	
+
 	return []Device{
 		{
 			ID:           1,
@@ -263,72 +263,72 @@ func (c *APIClient) getMockDevices() []Device {
 // CreateDevice создает новое устройство
 func (c *APIClient) CreateDevice(device Device) (*Device, error) {
 	url := fmt.Sprintf("%s/api/v1/devices", c.baseURL)
-	
+
 	jsonPayload, err := json.Marshal(device)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return nil, err
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
-	
+
 	var createdDevice Device
 	if err := json.NewDecoder(resp.Body).Decode(&createdDevice); err != nil {
 		return nil, err
 	}
-	
+
 	return &createdDevice, nil
 }
 
 // GetUserByTelegramID получает пользователя по Telegram ID
 func (c *APIClient) GetUserByTelegramID(telegramID int64) (*User, error) {
 	url := fmt.Sprintf("%s/api/v1/users?telegram_id=%d", c.baseURL, telegramID)
-	
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, nil
 	}
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
-	
+
 	var user User
 	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
 		return nil, err
 	}
-	
+
 	return &user, nil
 }
 
@@ -340,39 +340,39 @@ func (c *APIClient) CreateCustomer(customer Customer) (*Customer, error) {
 		customer.ID = uint(time.Now().Unix() % 10000)
 		return &customer, nil
 	}
-	
+
 	url := fmt.Sprintf("%s/api/v1/customers", c.baseURL)
-	
+
 	jsonPayload, err := json.Marshal(customer)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return nil, err
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
-	
+
 	var createdCustomer Customer
 	if err := json.NewDecoder(resp.Body).Decode(&createdCustomer); err != nil {
 		return nil, err
 	}
-	
+
 	return &createdCustomer, nil
 }
 
@@ -382,35 +382,35 @@ func (c *APIClient) UpdateDevicePrice(deviceID uint, price float64) error {
 	if c.baseURL == "http://localhost:8080" {
 		return nil
 	}
-	
+
 	url := fmt.Sprintf("%s/api/v1/devices/%d/price", c.baseURL, deviceID)
-	
+
 	payload := map[string]float64{"price": price}
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	
+
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return err
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
-	
+
 	return nil
 }
 
@@ -420,73 +420,73 @@ func (c *APIClient) AssignMaster(deviceID uint, masterID uint) error {
 	if c.baseURL == "http://localhost:8080" {
 		return nil
 	}
-	
+
 	url := fmt.Sprintf("%s/api/v1/devices/%d/master", c.baseURL, deviceID)
-	
+
 	payload := map[string]uint{"master_id": masterID}
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	
+
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return err
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
-	
+
 	return nil
 }
 
 // SendNotification отправляет уведомление через основную систему
 func (c *APIClient) SendNotification(userID *uint, message string) error {
 	url := fmt.Sprintf("%s/api/v1/bot/send-notification", c.baseURL)
-	
+
 	payload := map[string]interface{}{
 		"message": message,
 	}
 	if userID != nil {
 		payload["user_id"] = *userID
 	}
-	
+
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return err
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
-	
+
 	return nil
 }

@@ -18,12 +18,12 @@ func Start(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db 
 	// Очищаем состояние пользователя при команде /start
 	stateService := services.NewStateService(db)
 	stateService.ClearState(update.Message.From.ID)
-	
+
 	var user models.User
-	
+
 	// Проверяем существует ли пользователь
 	result := db.Where("telegram_id = ?", update.Message.From.ID).First(&user)
-	
+
 	if result.Error == gorm.ErrRecordNotFound {
 		// Определяем язык по умолчанию
 		lang := "ru"
@@ -73,7 +73,7 @@ func Start(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db 
 	// Отправляем приветственное сообщение и меню
 	lang := user.GetLanguage()
 	welcomeMessage := i18n.GetText(i18n.WelcomeMessage, lang) + "\n\n"
-	
+
 	if user.Role == models.UserRoleAdmin {
 		welcomeMessage += i18n.GetText(i18n.AdminWelcome, lang) + "\n\n"
 	} else {
@@ -104,7 +104,7 @@ func notifyAdminsNewUser(bot *tgbotapi.BotAPI, cfg *config.Config, user *models.
 		if idStr == "" {
 			continue
 		}
-		
+
 		adminId, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
 			continue

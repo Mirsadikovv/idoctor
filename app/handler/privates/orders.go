@@ -146,7 +146,7 @@ func NewOrder(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, 
 	// Начинаем процесс создания заказа
 	stateService := services.NewStateService(db)
 	orderData := &models.OrderData{}
-	
+
 	// Устанавливаем состояние ожидания имени клиента
 	err := stateService.SetState(user.TelegramID, models.StateWaitingCustomerName, orderData)
 	if err != nil {
@@ -215,7 +215,7 @@ func Analytics(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config,
 
 	messageText := "📊 " + i18n.GetText(map[string]string{
 		"ru": "Статистика и аналитика",
-		"uz": "Statistika va analitika", 
+		"uz": "Statistika va analitika",
 		"en": "Statistics and analytics",
 	}, lang) + "\n\n" + i18n.GetText(map[string]string{
 		"ru": "Выберите тип статистики или период для просмотра:",
@@ -953,7 +953,7 @@ func generateOrderCode(db *gorm.DB) (string, error) {
 	for i := 0; i < 10; i++ { // Максимум 10 попыток
 		// Генерация кода: формат ID-XXXX (например, ID-1234)
 		code = fmt.Sprintf("ID-%04d", rand.Intn(10000))
-		
+
 		// Проверяем уникальность
 		var exists bool
 		err := db.Model(&models.Device{}).Select("count(*) > 0").Where("code = ?", code).Find(&exists).Error
