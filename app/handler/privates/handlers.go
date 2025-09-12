@@ -56,6 +56,9 @@ func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Conf
 		if handled {
 			return
 		}
+		
+		// Проверяем, если пользователь вводит цену
+		HandlePriceInput(bot, update.Message, db, langCache)
 	}
 
 	if update.Message.IsCommand() {
@@ -161,6 +164,7 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 		"masters_add", "help_contact", "orders_refresh", "masters_list_all", "masters_list_active",
 		"stats_period_today", "stats_period_yesterday", "stats_period_week",
 		"stats_period_month", "stats_period_year", "stats_period_all_time", "devices_refresh",
+		"pricing_menu", "financial_stats",
 	}
 
 	for _, callback := range simpleCallbacks {
@@ -284,6 +288,10 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 		} else {
 			answerCallback(bot, callback.ID, i18n.GetText(i18n.NoAccess, lang))
 		}
+	case "pricing_menu":
+		HandlePricingMenu(bot, callback, db, langCache)
+	case "financial_stats":
+		HandleFinancialStats(bot, callback, db, langCache)
 	case "device":
 		if len(parts) >= 3 && parts[1] == "details" {
 			deviceID, err := strconv.ParseUint(parts[2], 10, 32)
@@ -379,6 +387,18 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 				log.Printf("Invalid device_status_set format: expected >=5 parts, got %d", len(parts))
 				answerCallback(bot, callback.ID, i18n.GetText(i18n.InvalidDataFormat, lang))
 			}
+		} else if action == "pricing_menu" {
+			HandlePricingMenu(bot, callback, db, langCache)
+		} else if action == "financial_stats" {
+			HandleFinancialStats(bot, callback, db, langCache)
+		} else if strings.HasPrefix(action, "pricing_device_") {
+			HandleDevicePricing(bot, callback, db, langCache)
+		} else if strings.HasPrefix(action, "set_repair_price_") {
+			HandleSetRepairPrice(bot, callback, db, langCache)
+		} else if strings.HasPrefix(action, "set_parts_price_") {
+			HandleSetPartsPrice(bot, callback, db, langCache)
+		} else if strings.HasPrefix(action, "toggle_paid_") {
+			HandleTogglePaid(bot, callback, db, langCache)
 		} else {
 			answerCallback(bot, callback.ID, i18n.GetText(i18n.UnknownAction, lang))
 		}

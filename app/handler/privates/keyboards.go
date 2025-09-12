@@ -65,6 +65,10 @@ func getMainInlineKeyboard(isAdmin bool, lang string) tgbotapi.InlineKeyboardMar
 				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("analytics", lang), "analytics"),
 			},
 			{
+				tgbotapi.NewInlineKeyboardButtonData("💰 Управление ценами", "pricing_menu"),
+				tgbotapi.NewInlineKeyboardButtonData("💸 Финансы", "financial_stats"),
+			},
+			{
 				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("search", lang), "search"),
 			},
 		}
@@ -76,6 +80,7 @@ func getMainInlineKeyboard(isAdmin bool, lang string) tgbotapi.InlineKeyboardMar
 				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("new_order", lang), "new_order"),
 			},
 			{
+				tgbotapi.NewInlineKeyboardButtonData("💰 Управление ценами", "pricing_menu"),
 				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("search", lang), "search"),
 			},
 		}
