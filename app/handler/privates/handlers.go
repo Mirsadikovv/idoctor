@@ -57,8 +57,13 @@ func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Conf
 			return
 		}
 		
-		// Проверяем, если пользователь вводит цену
-		HandlePriceInput(bot, update.Message, db, langCache)
+		// Проверяем, если пользователь вводит цену (только для состояний ценообразования)
+		stateService := services.NewStateService(db)
+		state, err := stateService.GetState(user.TelegramID)
+		if err == nil && state != nil && (state.State == "awaiting_repair_price" || state.State == "awaiting_parts_price") {
+			HandlePriceInput(bot, update.Message, db, langCache)
+			return
+		}
 	}
 
 	if update.Message.IsCommand() {
@@ -723,8 +728,88 @@ func handleDeviceIssueInput(bot *tgbotapi.BotAPI, update tgbotapi.Update, db *go
 
 // handlePriceInput обработка ввода цены (для существующих заказов)
 func handlePriceInput(bot *tgbotapi.BotAPI, update tgbotapi.Update, db *gorm.DB, stateService *services.StateService, user *models.User, inputText, lang string) bool {
-	// TODO: Реализовать обработку ввода цены
-	return false
+	// Получаем данные о заказе из состояния
+	var stateData map[string]interface{}
+	err := stateService.GetStateData(user.TelegramID, &stateData)
+	if err != nil {
+		log.Printf("Error getting state data: %v", err)
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Ошибка получения данных состояния",
+			"uz": "❌ Holat ma'lumotlarini olishda xatolik",
+			"en": "❌ Error getting state data",
+		}, lang))
+		stateService.ClearState(user.TelegramID)
+		return true
+	}
+
+	// Получаем ID заказа
+	orderIDFloat, ok := stateData["order_id"].(float64)
+	if !ok {
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Ошибка получения ID заказа",
+			"uz": "❌ Buyurtma ID sini olishda xatolik",
+			"en": "❌ Error getting order ID",
+		}, lang))
+		stateService.ClearState(user.TelegramID)
+		return true
+	}
+	orderID := uint(orderIDFloat)
+
+	// Парсим цену с использованием сервиса ценообразования
+	pricingService := services.NewPricingService(db)
+	price, err := pricingService.ParsePriceFromText(inputText)
+	if err != nil {
+		sendMessage(bot, update.Message.Chat.ID, fmt.Sprintf("❌ %s", err.Error()))
+		return true
+	}
+
+	// Обновляем цену в базе данных (для локального использования)
+	var device models.Device
+	if err := db.First(&device, orderID).Error; err != nil {
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Заказ не найден",
+			"uz": "❌ Buyurtma topilmadi",
+			"en": "❌ Order not found",
+		}, lang))
+		stateService.ClearState(user.TelegramID)
+		return true
+	}
+
+	// Устанавливаем общую стоимость
+	device.TotalCost = price
+	if err := db.Save(&device).Error; err != nil {
+		log.Printf("Error updating device price: %v", err)
+		sendMessage(bot, update.Message.Chat.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Ошибка сохранения цены",
+			"uz": "❌ Narxni saqlashda xatolik",
+			"en": "❌ Error saving price",
+		}, lang))
+		return true
+	}
+
+	// Очищаем состояние
+	stateService.ClearState(user.TelegramID)
+
+	// Отправляем подтверждение
+	successText := fmt.Sprintf("%s #%d\n\n💰 %s: %.2f %s",
+		i18n.GetText(map[string]string{
+			"ru": "✅ Цена успешно установлена для заказа",
+			"uz": "✅ Buyurtma uchun narx muvaffaqiyatli belgilandi",
+			"en": "✅ Price successfully set for order",
+		}, lang), orderID,
+		i18n.GetText(map[string]string{
+			"ru": "Цена",
+			"uz": "Narx",
+			"en": "Price",
+		}, lang), price,
+		i18n.GetText(map[string]string{
+			"ru": "сум",
+			"uz": "so'm",
+			"en": "sum",
+		}, lang))
+
+	sendMessage(bot, update.Message.Chat.ID, successText)
+	return true
 }
 
 // Обработчики callback для создания заказа

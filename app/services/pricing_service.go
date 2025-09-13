@@ -122,29 +122,56 @@ func (s *PricingService) GetDeviceWithPricing(deviceID uint) (*models.Device, er
 
 // ParsePriceFromText парсит цену из текстового сообщения
 func (s *PricingService) ParsePriceFromText(text string) (float64, error) {
+	if text == "" {
+		return 0, fmt.Errorf("введите цену")
+	}
+	
 	// Очищаем текст от лишних символов и приводим к нижнему регистру
 	cleanText := strings.ToLower(strings.TrimSpace(text))
+	
+	// Убираем пробелы и заменяем запятые на точки
 	cleanText = strings.ReplaceAll(cleanText, " ", "")
 	cleanText = strings.ReplaceAll(cleanText, ",", ".")
 	
 	// Убираем возможные валютные обозначения
 	cleanText = strings.ReplaceAll(cleanText, "сум", "")
+	cleanText = strings.ReplaceAll(cleanText, "сом", "")
 	cleanText = strings.ReplaceAll(cleanText, "sum", "")
+	cleanText = strings.ReplaceAll(cleanText, "som", "")
 	cleanText = strings.ReplaceAll(cleanText, "$", "")
 	cleanText = strings.ReplaceAll(cleanText, "₽", "")
+	cleanText = strings.ReplaceAll(cleanText, "руб", "")
+	
+	// Убираем точки в конце (если остались)
+	cleanText = strings.TrimSuffix(cleanText, ".")
+	
+	// Проверяем что остались только цифры и максимум одна точка
+	if cleanText == "" {
+		return 0, fmt.Errorf("введите цену в цифровом формате (например: 50000 или 75000.50)")
+	}
 	
 	// Парсим число
 	price, err := strconv.ParseFloat(cleanText, 64)
 	if err != nil {
-		return 0, fmt.Errorf("неверный формат цены. Введите число (например: 50000 или 50000.50)")
+		return 0, fmt.Errorf("неверный формат цены. Введите число (например: 50000 или 75000.50)")
 	}
 
+	// Проверяем разумные пределы
 	if price < 0 {
 		return 0, fmt.Errorf("цена не может быть отрицательной")
 	}
 
+	if price == 0 {
+		// 0 разрешен для случая "запчасти не нужны"
+		return price, nil
+	}
+
+	if price < 1 {
+		return 0, fmt.Errorf("цена слишком маленькая, минимум 1 сум")
+	}
+
 	if price > 999999999 {
-		return 0, fmt.Errorf("цена слишком большая")
+		return 0, fmt.Errorf("цена слишком большая, максимум 999 миллионов сум")
 	}
 
 	return price, nil
