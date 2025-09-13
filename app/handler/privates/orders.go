@@ -590,7 +590,7 @@ func showStatusChangeMenu(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery
 	// Создаем клавиатуру с вариантами статусов
 	var keyboard [][]tgbotapi.InlineKeyboardButton
 
-	statuses := []string{"received", "in_progress", "waiting_parts", "ready", "completed", "cancelled"}
+	statuses := []string{"received", "inProgress", "waitingParts", "ready", "completed", "cancelled"}
 
 	for _, status := range statuses {
 		statusText := getStatusText(status, lang)
@@ -974,12 +974,12 @@ func getStatusText(status string, lang string) string {
 			"uz": "🆕 Qabul qilindi",
 			"en": "🆕 Received",
 		},
-		"in_progress": {
+		"inProgress": {
 			"ru": "🔧 В работе",
 			"uz": "🔧 Ishlanmoqda",
 			"en": "🔧 In progress",
 		},
-		"waiting_parts": {
+		"waitingParts": {
 			"ru": "⏳ Ожидание запчастей",
 			"uz": "⏳ Ehtiyot qismlar kutilmoqda",
 			"en": "⏳ Waiting for parts",

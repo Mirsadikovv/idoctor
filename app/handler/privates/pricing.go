@@ -18,7 +18,7 @@ import (
 // HandlePricingMenu обрабатывает меню управления ценами
 func HandlePricingMenu(bot *tgbotapi.BotAPI, callbackQuery *tgbotapi.CallbackQuery, db *gorm.DB, langCache *i18n.LanguageCache) {
 	userID := uint(callbackQuery.From.ID)
-	
+
 	var user models.User
 	if err := db.First(&user, "telegram_id = ?", callbackQuery.From.ID).Error; err != nil {
 		log.Printf("Error getting user: %v", err)
@@ -31,7 +31,7 @@ func HandlePricingMenu(bot *tgbotapi.BotAPI, callbackQuery *tgbotapi.CallbackQue
 	}
 
 	pricingService := services.NewPricingService(db)
-	
+
 	// Получаем устройства для установки цен
 	devices, err := pricingService.GetDevicesForPricing(userID, user.Role)
 	if err != nil {
@@ -48,13 +48,13 @@ func HandlePricingMenu(bot *tgbotapi.BotAPI, callbackQuery *tgbotapi.CallbackQue
 
 	// Создаем клавиатуру с заказами
 	keyboard := tgbotapi.NewInlineKeyboardMarkup()
-	
+
 	for _, device := range devices {
 		deviceText := fmt.Sprintf("🆔 %s - %s %s", device.Code, device.Brand, device.Model)
 		if device.Customer != nil {
 			deviceText += fmt.Sprintf(" (%s)", device.Customer.Name)
 		}
-		
+
 		button := tgbotapi.NewInlineKeyboardButtonData(
 			deviceText,
 			fmt.Sprintf("pricing_device_%d", device.ID),
@@ -96,7 +96,7 @@ func HandleDevicePricing(bot *tgbotapi.BotAPI, callbackQuery *tgbotapi.CallbackQ
 
 	// Форматируем информацию об устройстве
 	text := pricingService.FormatPricingInfo(device)
-	
+
 	// Создаем клавиатуру для управления ценами
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -142,10 +142,10 @@ func HandleSetRepairPrice(bot *tgbotapi.BotAPI, callbackQuery *tgbotapi.Callback
 		return
 	}
 
-	msg := tgbotapi.NewMessage(callbackQuery.From.ID, 
-		"💰 Введите цену ремонта в сумах:\n\n" +
-		"Примеры: 50000, 75000.50, 100000\n" +
-		"Для отмены отправьте /cancel")
+	msg := tgbotapi.NewMessage(callbackQuery.From.ID,
+		"💰 Введите цену ремонта в сумах:\n\n"+
+			"Примеры: 50000, 75000.50, 100000\n"+
+			"Для отмены отправьте /cancel")
 	bot.Send(msg)
 }
 
@@ -165,7 +165,7 @@ func HandleSetPartsPrice(bot *tgbotapi.BotAPI, callbackQuery *tgbotapi.CallbackQ
 
 	// Сохраняем ID устройства в состоянии пользователя
 	stateService := services.NewStateService(db)
-	err = stateService.SetState(callbackQuery.From.ID, "awaiting_parts_price", map[string]interface{}{
+	err = stateService.SetState(callbackQuery.From.ID, "awaitingParts_price", map[string]interface{}{
 		"device_id": deviceID,
 	})
 	if err != nil {
@@ -174,11 +174,11 @@ func HandleSetPartsPrice(bot *tgbotapi.BotAPI, callbackQuery *tgbotapi.CallbackQ
 		return
 	}
 
-	msg := tgbotapi.NewMessage(callbackQuery.From.ID, 
-		"🔩 Введите цену запчастей в сумах:\n\n" +
-		"Примеры: 25000, 30000.50, 45000\n" +
-		"Если запчасти не требуются, введите 0\n" +
-		"Для отмены отправьте /cancel")
+	msg := tgbotapi.NewMessage(callbackQuery.From.ID,
+		"🔩 Введите цену запчастей в сумах:\n\n"+
+			"Примеры: 25000, 30000.50, 45000\n"+
+			"Если запчасти не требуются, введите 0\n"+
+			"Для отмены отправьте /cancel")
 	bot.Send(msg)
 }
 
@@ -204,7 +204,7 @@ func HandleTogglePaid(bot *tgbotapi.BotAPI, callbackQuery *tgbotapi.CallbackQuer
 	}
 
 	pricingService := services.NewPricingService(db)
-	
+
 	// Получаем текущий статус
 	device, err := pricingService.GetDeviceWithPricing(uint(deviceID))
 	if err != nil {
@@ -224,7 +224,7 @@ func HandleTogglePaid(bot *tgbotapi.BotAPI, callbackQuery *tgbotapi.CallbackQuer
 
 	// Получаем обновленную информацию
 	device, _ = pricingService.GetDeviceWithPricing(uint(deviceID))
-	
+
 	statusText := "❌ Не оплачено"
 	if device.IsPaid {
 		statusText = "✅ Оплачено"
@@ -274,7 +274,7 @@ func HandlePriceInput(bot *tgbotapi.BotAPI, message *tgbotapi.Message, db *gorm.
 		stateService.ClearState(message.From.ID)
 		return
 	}
-	
+
 	deviceIDFloat, ok := stateData["device_id"].(float64)
 	if !ok {
 		SendErrorMessage(bot, message.From.ID, "Ошибка получения ID устройства")
@@ -291,7 +291,7 @@ func HandlePriceInput(bot *tgbotapi.BotAPI, message *tgbotapi.Message, db *gorm.
 		err = pricingService.SetRepairPrice(deviceID, price, uint(message.From.ID), user.Role)
 		successMsg = fmt.Sprintf("✅ Цена ремонта установлена: %.2f сум", price)
 
-	case "awaiting_parts_price":
+	case "awaitingParts_price":
 		err = pricingService.SetPartsPrice(deviceID, price, uint(message.From.ID), user.Role)
 		successMsg = fmt.Sprintf("✅ Цена запчастей установлена: %.2f сум", price)
 
@@ -317,7 +317,7 @@ func HandlePriceInput(bot *tgbotapi.BotAPI, message *tgbotapi.Message, db *gorm.
 	// Показываем обновленную информацию об устройстве
 	device, _ := pricingService.GetDeviceWithPricing(deviceID)
 	text := pricingService.FormatPricingInfo(device)
-	
+
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("💰 Цена ремонта", fmt.Sprintf("set_repair_price_%d", device.ID)),
@@ -410,7 +410,7 @@ func HandleFinancialStatsPeriod(bot *tgbotapi.BotAPI, callbackQuery *tgbotapi.Ca
 	}
 
 	text := statsService.FormatFinancialStats(stats, "ru")
-	
+
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад к периодам", "financial_stats"),

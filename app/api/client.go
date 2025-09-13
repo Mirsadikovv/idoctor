@@ -196,7 +196,7 @@ func (c *APIClient) getMockDevices() []Device {
 			Brand:        "Apple",
 			SerialNumber: "ABC123456789",
 			Issue:        "Не включается, попадала в воду",
-			Status:       "in_progress",
+			Status:       "inProgress",
 			Price:        &price1,
 			CreatedAt:    "2024-01-15T10:00:00Z",
 			UpdatedAt:    "2024-01-15T10:00:00Z",

@@ -3,9 +3,10 @@ package handlers
 import (
 	"fmt"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"idoctor-bot/app/i18n"
 	"idoctor-bot/app/models"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 func getMainKeyboard(isAdmin bool, lang string) tgbotapi.ReplyKeyboardMarkup {
@@ -93,10 +94,10 @@ func getDeviceStatusKeyboard() tgbotapi.InlineKeyboardMarkup {
 	buttons := [][]tgbotapi.InlineKeyboardButton{
 		{
 			tgbotapi.NewInlineKeyboardButtonData("🆕 Принят", "status_received"),
-			tgbotapi.NewInlineKeyboardButtonData("🔧 В работе", "status_in_progress"),
+			tgbotapi.NewInlineKeyboardButtonData("🔧 В работе", "status_inProgress"),
 		},
 		{
-			tgbotapi.NewInlineKeyboardButtonData("⏳ Ожидание запчастей", "status_waiting_parts"),
+			tgbotapi.NewInlineKeyboardButtonData("⏳ Ожидание запчастей", "status_waitingParts"),
 			tgbotapi.NewInlineKeyboardButtonData("✅ Готов", "status_ready"),
 		},
 		{
@@ -549,7 +550,7 @@ func getStatusSelectionKeyboard(deviceID uint, lang string) tgbotapi.InlineKeybo
 					"uz": "🔧 Ishlanmoqda",
 					"en": "🔧 In progress",
 				}, lang),
-				fmt.Sprintf("device_status_set_%d_in_progress", deviceID)),
+				fmt.Sprintf("device_status_set_%d_inProgress", deviceID)),
 		},
 		{
 			tgbotapi.NewInlineKeyboardButtonData(
@@ -558,7 +559,7 @@ func getStatusSelectionKeyboard(deviceID uint, lang string) tgbotapi.InlineKeybo
 					"uz": "⏳ Ehtiyot qismlar kutilmoqda",
 					"en": "⏳ Waiting parts",
 				}, lang),
-				fmt.Sprintf("device_status_set_%d_waiting_parts", deviceID)),
+				fmt.Sprintf("device_status_set_%d_waitingParts", deviceID)),
 			tgbotapi.NewInlineKeyboardButtonData(
 				getText(map[string]string{
 					"ru": "✅ Готов",

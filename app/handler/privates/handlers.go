@@ -56,11 +56,11 @@ func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Conf
 		if handled {
 			return
 		}
-		
+
 		// Проверяем, если пользователь вводит цену (только для состояний ценообразования)
 		stateService := services.NewStateService(db)
 		state, err := stateService.GetState(user.TelegramID)
-		if err == nil && state != nil && (state.State == "awaiting_repair_price" || state.State == "awaiting_parts_price") {
+		if err == nil && state != nil && (state.State == "awaiting_repair_price" || state.State == "awaitingParts_price") {
 			HandlePriceInput(bot, update.Message, db, langCache)
 			return
 		}

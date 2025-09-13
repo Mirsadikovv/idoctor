@@ -39,10 +39,10 @@ updated_at = NOW();
 
 -- Добавляем тестовые устройства
 INSERT INTO devices (code, customer_id, master_id, device_type, brand, model, serial_number, problem, status, diagnosis, repair_cost, parts_cost, total_cost, is_paid, notes, received_at, deadline_at, warranty_days, created_at, updated_at) VALUES
-('DEV001', 1, 1, 'Смартфон', 'Apple', 'iPhone 12', 'ABC123456789', 'Не включается, попадал в воду', 'in_progress', 'Требуется замена материнской платы', 120000, 30000, 150000, false, 'Клиент согласен на ремонт', NOW() - INTERVAL '2 days', NOW() + INTERVAL '5 days', 30, NOW(), NOW()),
+('DEV001', 1, 1, 'Смартфон', 'Apple', 'iPhone 12', 'ABC123456789', 'Не включается, попадал в воду', 'inProgress', 'Требуется замена материнской платы', 120000, 30000, 150000, false, 'Клиент согласен на ремонт', NOW() - INTERVAL '2 days', NOW() + INTERVAL '5 days', 30, NOW(), NOW()),
 ('DEV002', 2, 2, 'Смартфон', 'Samsung', 'Galaxy S21', 'DEF987654321', 'Разбитый экран', 'ready', 'Заменен экран', 60000, 15000, 75000, true, 'Готов к выдаче', NOW() - INTERVAL '1 day', NOW() + INTERVAL '1 day', 14, NOW(), NOW()),
 ('DEV003', 3, NULL, 'Смартфон', 'Apple', 'iPhone 13', 'GHI111222333', 'Батарея быстро разряжается', 'received', '', 0, 0, 0, false, 'Ожидает назначения мастера', NOW(), NOW() + INTERVAL '7 days', 0, NOW(), NOW()),
-('DEV004', 4, 1, 'Ноутбук', 'ASUS', 'VivoBook 15', 'JKL444555666', 'Не включается', 'waiting_parts', 'Неисправен блок питания', 80000, 45000, 125000, false, 'Ждем поставку блока питания', NOW() - INTERVAL '3 days', NOW() + INTERVAL '10 days', 30, NOW(), NOW()),
+('DEV004', 4, 1, 'Ноутбук', 'ASUS', 'VivoBook 15', 'JKL444555666', 'Не включается', 'waitingParts', 'Неисправен блок питания', 80000, 45000, 125000, false, 'Ждем поставку блока питания', NOW() - INTERVAL '3 days', NOW() + INTERVAL '10 days', 30, NOW(), NOW()),
 ('DEV005', 1, 2, 'Планшет', 'Apple', 'iPad Air', 'MNO777888999', 'Не работает Wi-Fi', 'completed', 'Перепрошивка и настройка', 25000, 0, 25000, true, 'Выдан клиенту', NOW() - INTERVAL '5 days', NOW() - INTERVAL '2 days', 14, NOW(), NOW());
 
 -- Добавляем тестовые запчасти

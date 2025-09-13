@@ -11,8 +11,8 @@ type DeviceStatus string
 
 const (
 	DeviceStatusReceived     DeviceStatus = "received"
-	DeviceStatusInProgress   DeviceStatus = "in_progress"
-	DeviceStatusWaitingParts DeviceStatus = "waiting_parts"
+	DeviceStatusInProgress   DeviceStatus = "inProgress"
+	DeviceStatusWaitingParts DeviceStatus = "waitingParts"
 	DeviceStatusReady        DeviceStatus = "ready"
 	DeviceStatusCompleted    DeviceStatus = "completed"
 	DeviceStatusCancelled    DeviceStatus = "cancelled"

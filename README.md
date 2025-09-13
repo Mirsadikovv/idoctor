@@ -161,8 +161,8 @@ go build -o idoctor-bot .
 | Статус | Описание | Иконка |
 |--------|----------|--------|
 | received | Принят | 🆕 |
-| in_progress | В работе | 🔧 |
-| waiting_parts | Ожидание запчастей | ⏳ |
+| inProgress | В работе | 🔧 |
+| waitingParts | Ожидание запчастей | ⏳ |
 | ready | Готов | ✅ |
 | completed | Выдан | 📦 |
 | cancelled | Отменен | ❌ |
