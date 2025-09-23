@@ -1,5 +1,5 @@
 # Многоэтапная сборка
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25.1-alpine3.22 AS builder
 
 # Установка зависимостей для сборки
 RUN apk add --no-cache git ca-certificates tzdata
