@@ -63,10 +63,10 @@ func Load() (*Config, error) {
 
 	return &Config{
 		Database: DatabaseConfig{
-			Host:                  getEnv("DB_HOST", "localhost"),
+			Host:                  getEnv("DB_HOST", "0.0.0.0"),
 			Port:                  dbPort,
-			User:                  getEnv("DB_USER", "postgres"),
-			Password:              getEnv("DB_PASSWORD", "password"),
+			User:                  getEnv("DB_USER", "mirodil"),
+			Password:              getEnv("DB_PASSWORD", "1212"),
 			Database:              getEnv("DB_NAME", "repair_bot"),
 			SSLMode:               getEnv("DB_SSLMODE", "disable"),
 			MaxOpenConnections:    maxOpenConns,
