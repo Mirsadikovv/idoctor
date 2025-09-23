@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check Docker Compose version
+        run: docker compose version
+
+      - name: Build and deploy services
+        # env:
+        #   CI_JOB_LOGIN: x
+        #   CI_JOB_TOKEN: ${{ secrets.PAT_TOKEN }} 
+        #   POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        #   BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        #   ADMINS: ${{ secrets.ADMINS }}
+        #   POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+        #   POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+        #   POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+        #   POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+        run: |
+          docker compose -f docker-compose.yml up --build --force-recreate -d
+
+      - name: Show running containers
+        run: docker ps
