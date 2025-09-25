@@ -292,10 +292,16 @@ var ClientOrderProblem = map[string]string{
 	"en": "❗ Describe the device problem in detail:",
 }
 
-var ClientOrderContact = map[string]string{
-	"ru": "📞 Укажите ваше имя и номер телефона для связи в формате:\nИван Иванов\n+998901234567",
-	"uz": "📞 Aloqa uchun ismingiz va telefon raqamingizni quyidagi formatda kiriting:\nIvan Ivanov\n+998901234567",
-	"en": "📞 Provide your name and phone number for contact in the format:\nIvan Ivanov\n+998901234567",
+var ClientOrderContactName = map[string]string{
+	"ru": "👤 Укажите ваше имя:",
+	"uz": "👤 Ismingizni kiriting:",
+	"en": "👤 Enter your name:",
+}
+
+var ClientOrderContactPhone = map[string]string{
+	"ru": "📞 Укажите ваш номер телефона:",
+	"uz": "📞 Telefon raqamingizni kiriting:",
+	"en": "📞 Enter your phone number:",
 }
 
 var ClientOrderConfirm = map[string]string{

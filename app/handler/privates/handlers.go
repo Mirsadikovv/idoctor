@@ -52,7 +52,7 @@ func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Conf
 	// Проверка состояния пользователя для обработки ввода
 	if !update.Message.IsCommand() {
 		// Проверяем, ожидается ли ввод от пользователя
-		handled := handleUserState(bot, update, cfg, db, &user)
+		handled := handleUserState(bot, update, cfg, db, &user, langCache)
 		if handled {
 			return
 		}
@@ -124,6 +124,31 @@ func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Conf
 			Menu(bot, update, cfg, db, langCache)
 		case i18n.GetButton("change_language", lang):
 			ShowLanguageMenu(bot, update, cfg, db, langCache)
+		case i18n.GetText(i18n.CreateOrder, lang):
+			if user.IsClient() {
+				// Создание заказа клиентом
+				HandleCreateOrder(bot, update, db, langCache)
+			} else {
+				sendMessage(bot, update.Message.Chat.ID, i18n.GetText(i18n.NoAccess, lang))
+			}
+		case i18n.GetText(i18n.MyOrders, lang):
+			if user.IsClient() {
+				HandleClientOrders(bot, update, db, langCache)
+			} else {
+				MyOrders(bot, update, cfg, db, langCache)
+			}
+		case i18n.GetText(i18n.OrderStatus, lang):
+			if user.IsClient() {
+				HandleClientOrders(bot, update, db, langCache)
+			} else {
+				sendMessage(bot, update.Message.Chat.ID, i18n.GetText(i18n.NoAccess, lang))
+			}
+		case i18n.GetText(i18n.PendingOrders, lang):
+			if user.IsMaster() {
+				HandlePendingOrders(bot, update, db, langCache)
+			} else {
+				sendMessage(bot, update.Message.Chat.ID, i18n.GetText(i18n.NoAccess, lang))
+			}
 		default:
 			// Попробуем обработать как поиск
 			handleTextSearch(bot, update, cfg, db, &user)
@@ -169,7 +194,8 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 		"masters_add", "help_contact", "orders_refresh", "masters_list_all", "masters_list_active",
 		"stats_period_today", "stats_period_yesterday", "stats_period_week",
 		"stats_period_month", "stats_period_year", "stats_period_all_time", "devices_refresh",
-		"pricing_menu", "financial_stats",
+		"pricing_menu", "financial_stats", "create_order", "client_orders", "pending_orders",
+		"confirm_order_yes", "confirm_order_no",
 	}
 
 	for _, callback := range simpleCallbacks {
@@ -416,11 +442,15 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 			// Заказы в ожидании для мастеров
 			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
 			HandlePendingOrders(bot, callbackUpdate, db, langCache)
-		} else if strings.HasPrefix(action, "accept_order_") {
+		} else if strings.HasPrefix(data, "accept_order_") {
 			// Принятие заказа мастером
 			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
 			HandleAcceptOrder(bot, callbackUpdate, db, langCache)
-		} else if strings.HasPrefix(action, "confirm_order_") {
+		} else if strings.HasPrefix(data, "order_details_") {
+			// Детали заказа
+			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
+			HandleOrderDetails(bot, callbackUpdate, db, langCache)
+		} else if action == "confirm_order_yes" || action == "confirm_order_no" {
 			// Подтверждение заказа клиентом
 			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
 			HandleOrderConfirm(bot, callbackUpdate, db, langCache)
@@ -438,7 +468,7 @@ func answerCallback(bot *tgbotapi.BotAPI, callbackID string, text string) {
 }
 
 // handleUserState обрабатывает состояния пользователя (ввод данных)
-func handleUserState(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB, user *models.User) bool {
+func handleUserState(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *gorm.DB, user *models.User, langCache *i18n.LanguageCache) bool {
 	stateService := services.NewStateService(db)
 	state, err := stateService.GetState(user.TelegramID)
 	if err != nil {
@@ -475,9 +505,10 @@ func handleUserState(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.C
 		models.StateClientWaitingDeviceBrand,
 		models.StateClientWaitingDeviceModel,
 		models.StateClientWaitingProblem,
-		models.StateClientWaitingContactInfo:
+		models.StateClientWaitingContactName,
+		models.StateClientWaitingContactPhone:
 		// Перенаправляем на обработчик клиентских заказов
-		HandleClientOrderMessage(bot, update, db, i18n.NewLanguageCache())
+		HandleClientOrderMessage(bot, update, db, langCache)
 		return true
 	default:
 		return false

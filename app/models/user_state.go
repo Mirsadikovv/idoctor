@@ -23,7 +23,8 @@ const (
 	StateClientWaitingDeviceBrand  UserStateType = "client_waiting_device_brand"
 	StateClientWaitingDeviceModel  UserStateType = "client_waiting_device_model"
 	StateClientWaitingProblem      UserStateType = "client_waiting_problem"
-	StateClientWaitingContactInfo  UserStateType = "client_waiting_contact_info"
+	StateClientWaitingContactName  UserStateType = "client_waiting_contact_name"
+	StateClientWaitingContactPhone UserStateType = "client_waiting_contact_phone"
 	StateClientConfirmingOrder     UserStateType = "client_confirming_order"
 )
 

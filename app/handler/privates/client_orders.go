@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
@@ -17,7 +18,23 @@ import (
 
 // HandleCreateOrder обрабатывает начало создания заказа клиентом
 func HandleCreateOrder(bot *tgbotapi.BotAPI, update tgbotapi.Update, db *gorm.DB, langCache *i18n.LanguageCache) {
-	userID := update.CallbackQuery.From.ID
+	var userID int64
+	var chatID int64
+	var callbackID string
+
+	// Определяем источник вызова - callback или текстовое сообщение
+	if update.CallbackQuery != nil {
+		userID = update.CallbackQuery.From.ID
+		chatID = update.CallbackQuery.Message.Chat.ID
+		callbackID = update.CallbackQuery.ID
+	} else if update.Message != nil {
+		userID = update.Message.From.ID
+		chatID = update.Message.Chat.ID
+	} else {
+		log.Printf("Неизвестный тип update в HandleCreateOrder")
+		return
+	}
+
 	lang := langCache.Get(userID)
 
 	// Проверяем роль пользователя
@@ -28,7 +45,7 @@ func HandleCreateOrder(bot *tgbotapi.BotAPI, update tgbotapi.Update, db *gorm.DB
 	}
 
 	if !user.IsClient() {
-		bot.Send(tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, i18n.GetText(i18n.NoAccess, lang)))
+		bot.Send(tgbotapi.NewMessage(chatID, i18n.GetText(i18n.NoAccess, lang)))
 		return
 	}
 
@@ -36,11 +53,13 @@ func HandleCreateOrder(bot *tgbotapi.BotAPI, update tgbotapi.Update, db *gorm.DB
 	stateService := services.NewStateService(db)
 	stateService.SetState(userID, models.StateClientWaitingDeviceType, nil)
 
-	msg := tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, i18n.GetText(i18n.ClientOrderStart, lang))
+	msg := tgbotapi.NewMessage(chatID, i18n.GetText(i18n.ClientOrderStart, lang))
 	bot.Send(msg)
 
-	// Отвечаем на callback
-	bot.Request(tgbotapi.NewCallback(update.CallbackQuery.ID, ""))
+	// Отвечаем на callback если это callback
+	if callbackID != "" {
+		bot.Request(tgbotapi.NewCallback(callbackID, ""))
+	}
 }
 
 // HandleClientOrderMessage обрабатывает сообщения клиента при создании заказа
@@ -82,27 +101,45 @@ func HandleClientOrderMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update, db *
 
 	case models.StateClientWaitingProblem:
 		orderData.Problem = text
-		stateService.SetState(userID, models.StateClientWaitingContactInfo, orderData)
-		bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, i18n.GetText(i18n.ClientOrderContact, lang)))
+		stateService.SetState(userID, models.StateClientWaitingContactName, orderData)
+		bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, i18n.GetText(i18n.ClientOrderContactName, lang)))
 
-	case models.StateClientWaitingContactInfo:
-		lines := strings.Split(text, "\n")
-		if len(lines) >= 2 {
-			orderData.ContactName = strings.TrimSpace(lines[0])
-			orderData.ContactPhone = strings.TrimSpace(lines[1])
-
-			stateService.SetState(userID, models.StateClientConfirmingOrder, orderData)
-
-			confirmText := fmt.Sprintf(i18n.GetText(i18n.ClientOrderConfirm, lang),
-				orderData.DeviceType, orderData.DeviceBrand, orderData.DeviceModel,
-				orderData.Problem, orderData.ContactName, orderData.ContactPhone)
-
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, confirmText)
-			msg.ReplyMarkup = getOrderConfirmKeyboard(lang)
-			bot.Send(msg)
-		} else {
-			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, i18n.GetText(i18n.ClientOrderContact, lang)))
+	case models.StateClientWaitingContactName:
+		if len(strings.TrimSpace(text)) < 2 {
+			errorText := map[string]string{
+				"ru": "❌ Имя должно содержать минимум 2 символа. Попробуйте еще раз:",
+				"uz": "❌ Ism kamida 2 ta belgidan iborat bo'lishi kerak. Qaytadan urinib ko'ring:",
+				"en": "❌ Name must contain at least 2 characters. Please try again:",
+			}
+			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, i18n.GetText(errorText, lang)))
+			return
 		}
+
+		orderData.ContactName = text
+		stateService.SetState(userID, models.StateClientWaitingContactPhone, orderData)
+		bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, i18n.GetText(i18n.ClientOrderContactPhone, lang)))
+
+	case models.StateClientWaitingContactPhone:
+		if !isValidPhoneNumber(text) {
+			errorText := map[string]string{
+				"ru": "❌ Неверный формат номера телефона. Введите номер в формате: +998901234567 или 998901234567",
+				"uz": "❌ Telefon raqami formati noto'g'ri. Raqamni quyidagi formatda kiriting: +998901234567 yoki 998901234567",
+				"en": "❌ Invalid phone number format. Enter the number in format: +998901234567 or 998901234567",
+			}
+			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, i18n.GetText(errorText, lang)))
+			return
+		}
+
+		orderData.ContactPhone = text
+		stateService.SetState(userID, models.StateClientConfirmingOrder, orderData)
+
+		confirmText := fmt.Sprintf(i18n.GetText(i18n.ClientOrderConfirm, lang),
+			orderData.DeviceType, orderData.DeviceBrand, orderData.DeviceModel,
+			orderData.Problem, orderData.ContactName, orderData.ContactPhone)
+
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, confirmText)
+		msg.ReplyMarkup = getOrderConfirmKeyboard(lang)
+		bot.Send(msg)
 	}
 }
 
@@ -243,4 +280,31 @@ func notifyMastersNewOrder(bot *tgbotapi.BotAPI, db *gorm.DB, device *models.Dev
 			log.Printf("Ошибка отправки уведомления мастеру %s: %v", master.Name, err)
 		}
 	}
+}
+
+// isValidPhoneNumber проверяет корректность номера телефона
+func isValidPhoneNumber(phone string) bool {
+	// Очищаем номер от пробелов и дефисов
+	cleanPhone := strings.ReplaceAll(strings.ReplaceAll(phone, " ", ""), "-", "")
+
+	// Паттерны для различных форматов номеров
+	patterns := []string{
+		`^\+\d{12}$`,          // +998901234567
+		`^\d{12}$`,            // 998901234567
+		`^\+\d{11}$`,          // +77012345678
+		`^\d{11}$`,            // 77012345678
+		`^\+7\d{10}$`,         // +71234567890
+		`^8\d{10}$`,           // 81234567890
+		`^\+1\d{10}$`,         // +11234567890
+		`^\d{10}$`,            // 1234567890
+	}
+
+	for _, pattern := range patterns {
+		matched, _ := regexp.MatchString(pattern, cleanPhone)
+		if matched {
+			return true
+		}
+	}
+
+	return false
 }
