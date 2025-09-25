@@ -54,6 +54,7 @@ type Device struct {
 	ID           uint         `gorm:"primaryKey" json:"id"`
 	Code         string       `gorm:"size:20;uniqueIndex;not null" json:"code"`
 	CustomerID   uint         `gorm:"not null" json:"customer_id"`
+	ClientID     *uint        `json:"client_id"` // ID клиента (User с ролью client)
 	MasterID     *uint        `json:"master_id"`
 	DeviceType   string       `gorm:"size:100;not null" json:"device_type"`
 	Brand        string       `gorm:"size:100" json:"brand"`
@@ -77,6 +78,7 @@ type Device struct {
 
 	// Связи
 	Customer *Customer `gorm:"foreignKey:CustomerID" json:"customer,omitempty"`
+	Client   *User     `gorm:"foreignKey:ClientID" json:"client,omitempty"`
 	Master   *User     `gorm:"foreignKey:MasterID" json:"master,omitempty"`
 	Parts    []Part    `gorm:"many2many:device_parts;" json:"parts,omitempty"`
 }

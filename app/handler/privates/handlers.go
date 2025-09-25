@@ -404,6 +404,26 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 			HandleSetPartsPrice(bot, callback, db, langCache)
 		} else if strings.HasPrefix(action, "toggle_paid_") {
 			HandleTogglePaid(bot, callback, db, langCache)
+		} else if action == "create_order" {
+			// Создание заказа клиентом
+			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
+			HandleCreateOrder(bot, callbackUpdate, db, langCache)
+		} else if action == "client_orders" {
+			// Заказы клиента
+			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
+			HandleClientOrders(bot, callbackUpdate, db, langCache)
+		} else if action == "pending_orders" {
+			// Заказы в ожидании для мастеров
+			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
+			HandlePendingOrders(bot, callbackUpdate, db, langCache)
+		} else if strings.HasPrefix(action, "accept_order_") {
+			// Принятие заказа мастером
+			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
+			HandleAcceptOrder(bot, callbackUpdate, db, langCache)
+		} else if strings.HasPrefix(action, "confirm_order_") {
+			// Подтверждение заказа клиентом
+			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
+			HandleOrderConfirm(bot, callbackUpdate, db, langCache)
 		} else {
 			answerCallback(bot, callback.ID, i18n.GetText(i18n.UnknownAction, lang))
 		}
@@ -450,6 +470,15 @@ func handleUserState(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.C
 		return handleMasterTelegramIDInput(bot, update, db, stateService, user, inputText, lang)
 	case models.StateSettingPrice:
 		return handlePriceInput(bot, update, db, stateService, user, inputText, lang)
+	// Обработка состояний создания заказов клиентами
+	case models.StateClientWaitingDeviceType,
+		models.StateClientWaitingDeviceBrand,
+		models.StateClientWaitingDeviceModel,
+		models.StateClientWaitingProblem,
+		models.StateClientWaitingContactInfo:
+		// Перенаправляем на обработчик клиентских заказов
+		HandleClientOrderMessage(bot, update, db, i18n.NewLanguageCache())
+		return true
 	default:
 		return false
 	}
@@ -1488,7 +1517,7 @@ func handleMainMenuCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQue
 		"en": "🏠 Main menu\n\nChoose an action:",
 	}, lang)
 
-	keyboard := getMainInlineKeyboard(user.Role == models.UserRoleAdmin, lang)
+	keyboard := getMainInlineKeyboard(user.Role, lang)
 
 	// Пытаемся отредактировать сообщение
 	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, callback.Message.MessageID, messageText)

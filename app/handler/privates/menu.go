@@ -32,7 +32,7 @@ func Menu(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db *
 	welcomeMessage += i18n.GetText(i18n.UseMenuBelow, lang)
 
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, welcomeMessage)
-	msg.ReplyMarkup = getMainKeyboard(user.Role == models.UserRoleAdmin, lang)
+	msg.ReplyMarkup = getMainKeyboard(user.Role, lang)
 
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending menu: %v", err)

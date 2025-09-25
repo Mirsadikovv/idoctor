@@ -9,10 +9,10 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func getMainKeyboard(isAdmin bool, lang string) tgbotapi.ReplyKeyboardMarkup {
+func getMainKeyboard(userRole models.UserRole, lang string) tgbotapi.ReplyKeyboardMarkup {
 	var buttons [][]tgbotapi.KeyboardButton
 
-	if isAdmin {
+	if userRole == models.UserRoleAdmin {
 		// Клавиатура для админа
 		buttons = [][]tgbotapi.KeyboardButton{
 			{
@@ -31,15 +31,30 @@ func getMainKeyboard(isAdmin bool, lang string) tgbotapi.ReplyKeyboardMarkup {
 				tgbotapi.NewKeyboardButton(i18n.GetButton("change_language", lang)),
 			},
 		}
-	} else {
+	} else if userRole == models.UserRoleMaster {
 		// Клавиатура для мастера
 		buttons = [][]tgbotapi.KeyboardButton{
 			{
 				tgbotapi.NewKeyboardButton(i18n.GetButton("my_orders", lang)),
-				tgbotapi.NewKeyboardButton(i18n.GetButton("new_order", lang)),
+				tgbotapi.NewKeyboardButton(i18n.GetText(i18n.PendingOrders, lang)),
 			},
 			{
 				tgbotapi.NewKeyboardButton(i18n.GetButton("search", lang)),
+				tgbotapi.NewKeyboardButton(i18n.GetButton("menu", lang)),
+			},
+			{
+				tgbotapi.NewKeyboardButton(i18n.GetButton("change_language", lang)),
+			},
+		}
+	} else {
+		// Клавиатура для клиента
+		buttons = [][]tgbotapi.KeyboardButton{
+			{
+				tgbotapi.NewKeyboardButton(i18n.GetText(i18n.CreateOrder, lang)),
+				tgbotapi.NewKeyboardButton(i18n.GetText(i18n.MyOrders, lang)),
+			},
+			{
+				tgbotapi.NewKeyboardButton(i18n.GetText(i18n.OrderStatus, lang)),
 				tgbotapi.NewKeyboardButton(i18n.GetButton("menu", lang)),
 			},
 			{
@@ -51,10 +66,10 @@ func getMainKeyboard(isAdmin bool, lang string) tgbotapi.ReplyKeyboardMarkup {
 	return tgbotapi.NewReplyKeyboard(buttons...)
 }
 
-func getMainInlineKeyboard(isAdmin bool, lang string) tgbotapi.InlineKeyboardMarkup {
+func getMainInlineKeyboard(userRole models.UserRole, lang string) tgbotapi.InlineKeyboardMarkup {
 	var buttons [][]tgbotapi.InlineKeyboardButton
 
-	if isAdmin {
+	if userRole == models.UserRoleAdmin {
 		// Клавиатура для админа
 		buttons = [][]tgbotapi.InlineKeyboardButton{
 			{
@@ -73,16 +88,27 @@ func getMainInlineKeyboard(isAdmin bool, lang string) tgbotapi.InlineKeyboardMar
 				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("search", lang), "search"),
 			},
 		}
-	} else {
+	} else if userRole == models.UserRoleMaster {
 		// Клавиатура для мастера
 		buttons = [][]tgbotapi.InlineKeyboardButton{
 			{
 				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("my_orders", lang), "my_orders"),
-				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("new_order", lang), "new_order"),
+				tgbotapi.NewInlineKeyboardButtonData(i18n.GetText(i18n.PendingOrders, lang), "pending_orders"),
 			},
 			{
 				tgbotapi.NewInlineKeyboardButtonData("💰 Управление ценами", "pricing_menu"),
 				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("search", lang), "search"),
+			},
+		}
+	} else {
+		// Клавиатура для клиента
+		buttons = [][]tgbotapi.InlineKeyboardButton{
+			{
+				tgbotapi.NewInlineKeyboardButtonData(i18n.GetText(i18n.CreateOrder, lang), "create_order"),
+				tgbotapi.NewInlineKeyboardButtonData(i18n.GetText(i18n.MyOrders, lang), "client_orders"),
+			},
+			{
+				tgbotapi.NewInlineKeyboardButtonData(i18n.GetText(i18n.OrderStatus, lang), "order_status"),
 			},
 		}
 	}
@@ -594,6 +620,39 @@ func getStatusSelectionKeyboard(deviceID uint, lang string) tgbotapi.InlineKeybo
 				fmt.Sprintf("device_details_%d", deviceID)),
 		},
 	}
+
+	return tgbotapi.NewInlineKeyboardMarkup(buttons...)
+}
+
+// getPendingOrdersKeyboard возвращает клавиатуру для заказов в ожидании
+func getPendingOrdersKeyboard(devices []models.Device, lang string) tgbotapi.InlineKeyboardMarkup {
+	var buttons [][]tgbotapi.InlineKeyboardButton
+
+	for _, device := range devices {
+		if device.MasterID == nil && device.Status == models.DeviceStatusReceived {
+			text := fmt.Sprintf("📱 %s - %s", device.Code, device.DeviceType)
+			if len(text) > 30 {
+				text = text[:27] + "..."
+			}
+
+			buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
+				tgbotapi.NewInlineKeyboardButtonData(text, fmt.Sprintf("order_details_%d", device.ID)),
+				tgbotapi.NewInlineKeyboardButtonData(i18n.GetText(i18n.AcceptOrder, lang), fmt.Sprintf("accept_order_%d", device.ID)),
+			})
+		}
+	}
+
+	if len(buttons) == 0 {
+		buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
+			tgbotapi.NewInlineKeyboardButtonData(i18n.GetText(i18n.NoAvailableOrders, lang), "no_orders"),
+		})
+	}
+
+	// Кнопка обновления и возврата
+	buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData("🔄 Обновить", "pending_orders"),
+		tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "main_menu"),
+	})
 
 	return tgbotapi.NewInlineKeyboardMarkup(buttons...)
 }

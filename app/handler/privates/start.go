@@ -43,7 +43,7 @@ func Start(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db 
 			Username:   &update.Message.From.UserName,
 			FirstName:  &update.Message.From.FirstName,
 			LastName:   &update.Message.From.LastName,
-			Role:       models.UserRoleMaster, // По умолчанию мастер
+			Role:       models.UserRoleClient, // По умолчанию клиент
 			Language:   lang,
 			IsActive:   true,
 		}
@@ -59,8 +59,8 @@ func Start(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db 
 			return
 		}
 
-		// Уведомляем админов о новом пользователе
-		if user.Role == models.UserRoleMaster {
+		// Уведомляем админов о новом пользователе (клиентах и мастерах)
+		if user.Role == models.UserRoleMaster || user.Role == models.UserRoleClient {
 			notifyAdminsNewUser(bot, cfg, &user)
 		}
 
@@ -76,14 +76,16 @@ func Start(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, db 
 
 	if user.Role == models.UserRoleAdmin {
 		welcomeMessage += i18n.GetText(i18n.AdminWelcome, lang) + "\n\n"
-	} else {
+	} else if user.Role == models.UserRoleMaster {
 		welcomeMessage += i18n.GetText(i18n.MasterWelcome, lang) + "\n\n"
+	} else {
+		welcomeMessage += i18n.GetText(i18n.ClientWelcome, lang) + "\n\n"
 	}
 
 	welcomeMessage += i18n.GetText(i18n.UseMenuBelow, lang)
 
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, welcomeMessage)
-	msg.ReplyMarkup = getMainKeyboard(user.Role == models.UserRoleAdmin, lang)
+	msg.ReplyMarkup = getMainKeyboard(user.Role, lang)
 
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Ошибка отправки сообщения: %v", err)

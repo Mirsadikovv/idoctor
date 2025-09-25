@@ -19,6 +19,12 @@ var MasterWelcome = map[string]string{
 	"en": "🔨 You are logged in as master\nYou can view and manage your orders.",
 }
 
+var ClientWelcome = map[string]string{
+	"ru": "👤 Вы вошли как клиент\nВы можете создавать заказы на ремонт и отслеживать их статус.",
+	"uz": "👤 Siz mijoz sifatida kirdingiz\nTa'mirlash buyurtmalarini yaratishingiz va ularning holatini kuzatishingiz mumkin.",
+	"en": "👤 You are logged in as client\nYou can create repair orders and track their status.",
+}
+
 var UseMenuBelow = map[string]string{
 	"ru": "Используйте меню ниже для навигации:",
 	"uz": "Navigatsiya uchun quyidagi menyudan foydalaning:",
@@ -210,6 +216,116 @@ var Buttons = map[string]map[string]string{
 		"uz": "🇬🇧 English",
 		"en": "🇬🇧 English",
 	},
+}
+
+// Тексты для клиентов
+var CreateOrder = map[string]string{
+	"ru": "📝 Создать заказ",
+	"uz": "📝 Buyurtma yaratish",
+	"en": "📝 Create order",
+}
+
+var MyOrders = map[string]string{
+	"ru": "📋 Мои заказы",
+	"uz": "📋 Mening buyurtmalarim",
+	"en": "📋 My orders",
+}
+
+var OrderStatus = map[string]string{
+	"ru": "📊 Статус заказа",
+	"uz": "📊 Buyurtma holati",
+	"en": "📊 Order status",
+}
+
+var PendingOrders = map[string]string{
+	"ru": "⏳ Заказы в ожидании",
+	"uz": "⏳ Kutilayotgan buyurtmalar",
+	"en": "⏳ Pending orders",
+}
+
+var AcceptOrder = map[string]string{
+	"ru": "✅ Принять заказ",
+	"uz": "✅ Buyurtmani qabul qilish",
+	"en": "✅ Accept order",
+}
+
+var OrderAccepted = map[string]string{
+	"ru": "✅ Заказ принят мастером",
+	"uz": "✅ Buyurtma usta tomonidan qabul qilindi",
+	"en": "✅ Order accepted by master",
+}
+
+var OrderDeclined = map[string]string{
+	"ru": "❌ Заказ отклонен",
+	"uz": "❌ Buyurtma rad etildi",
+	"en": "❌ Order declined",
+}
+
+var NoAvailableOrders = map[string]string{
+	"ru": "📭 Нет доступных заказов",
+	"uz": "📭 Mavjud buyurtmalar yo'q",
+	"en": "📭 No available orders",
+}
+
+// Тексты для создания заказов клиентами
+var ClientOrderStart = map[string]string{
+	"ru": "📝 Создание нового заказа\n\nДавайте оформим заказ на ремонт вашего устройства.\nВведите тип устройства (например: смартфон, планшет, ноутбук):",
+	"uz": "📝 Yangi buyurtma yaratish\n\nQurilmangizni ta'mirlash uchun buyurtma berish jarayonini boshlaymiz.\nQurilma turini kiriting (masalan: smartfon, planshet, noutbuk):",
+	"en": "📝 Creating a new order\n\nLet's create a repair order for your device.\nEnter the device type (e.g.: smartphone, tablet, laptop):",
+}
+
+var ClientOrderDeviceBrand = map[string]string{
+	"ru": "📱 Отлично! Теперь введите марку устройства (например: Apple, Samsung, Xiaomi):",
+	"uz": "📱 Ajoyib! Endi qurilma markasini kiriting (masalan: Apple, Samsung, Xiaomi):",
+	"en": "📱 Great! Now enter the device brand (e.g.: Apple, Samsung, Xiaomi):",
+}
+
+var ClientOrderDeviceModel = map[string]string{
+	"ru": "🏷️ Теперь введите модель устройства (например: iPhone 13, Galaxy S21):",
+	"uz": "🏷️ Endi qurilma modelini kiriting (masalan: iPhone 13, Galaxy S21):",
+	"en": "🏷️ Now enter the device model (e.g.: iPhone 13, Galaxy S21):",
+}
+
+var ClientOrderProblem = map[string]string{
+	"ru": "❗ Опишите проблему с устройством подробно:",
+	"uz": "❗ Qurilma bilan bog'liq muammoni batafsil tavsiflang:",
+	"en": "❗ Describe the device problem in detail:",
+}
+
+var ClientOrderContact = map[string]string{
+	"ru": "📞 Укажите ваше имя и номер телефона для связи в формате:\nИван Иванов\n+998901234567",
+	"uz": "📞 Aloqa uchun ismingiz va telefon raqamingizni quyidagi formatda kiriting:\nIvan Ivanov\n+998901234567",
+	"en": "📞 Provide your name and phone number for contact in the format:\nIvan Ivanov\n+998901234567",
+}
+
+var ClientOrderConfirm = map[string]string{
+	"ru": "✅ Проверьте данные заказа:\n\n📱 Тип устройства: %s\n🏷️ Марка: %s\n📋 Модель: %s\n❗ Проблема: %s\n👤 Контакт: %s\n📞 Телефон: %s\n\nВсе верно?",
+	"uz": "✅ Buyurtma ma'lumotlarini tekshiring:\n\n📱 Qurilma turi: %s\n🏷️ Marka: %s\n📋 Model: %s\n❗ Muammo: %s\n👤 Kontakt: %s\n📞 Telefon: %s\n\nHammasi to'g'rimi?",
+	"en": "✅ Check your order details:\n\n📱 Device type: %s\n🏷️ Brand: %s\n📋 Model: %s\n❗ Problem: %s\n👤 Contact: %s\n📞 Phone: %s\n\nIs everything correct?",
+}
+
+var ClientOrderCreated = map[string]string{
+	"ru": "🎉 Заказ успешно создан!\n\n📋 Номер заказа: %s\n\nВаш заказ передан мастерам. Как только кто-то из них примет заказ, мы уведомим вас.",
+	"uz": "🎉 Buyurtma muvaffaqiyatli yaratildi!\n\n📋 Buyurtma raqami: %s\n\nBuyurtmangiz ustalarga yuborildi. Ulardan biri buyurtmani qabul qilganda sizni xabardor qilamiz.",
+	"en": "🎉 Order created successfully!\n\n📋 Order number: %s\n\nYour order has been sent to masters. We'll notify you once one of them accepts the order.",
+}
+
+var ClientOrderCancelled = map[string]string{
+	"ru": "❌ Создание заказа отменено",
+	"uz": "❌ Buyurtma yaratish bekor qilindi",
+	"en": "❌ Order creation cancelled",
+}
+
+var ConfirmYes = map[string]string{
+	"ru": "✅ Да, все верно",
+	"uz": "✅ Ha, hammasi to'g'ri",
+	"en": "✅ Yes, everything is correct",
+}
+
+var ConfirmNo = map[string]string{
+	"ru": "❌ Нет, изменить",
+	"uz": "❌ Yo'q, o'zgartirish",
+	"en": "❌ No, change",
 }
 
 // Функция для получения текста по языку

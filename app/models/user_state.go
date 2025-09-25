@@ -10,7 +10,7 @@ type UserStateType string
 const (
 	StateIdle         UserStateType = "idle"
 	StateSettingPrice UserStateType = "setting_price"
-	// Состояния для подачи заявки на ремонт
+	// Состояния для подачи заявки на ремонт (администраторы)
 	StateWaitingCustomerName     UserStateType = "waiting_customer_name"
 	StateWaitingCustomerPhone    UserStateType = "waiting_customer_phone"
 	StateWaitingDeviceBrand      UserStateType = "waiting_device_brand"
@@ -18,6 +18,13 @@ const (
 	StateWaitingDeviceIssue      UserStateType = "waiting_device_issue"
 	StateConfirmingOrder         UserStateType = "confirming_order"
 	StateWaitingMasterTelegramID UserStateType = "waiting_master_telegram_id"
+	// Состояния для создания заказов клиентами
+	StateClientWaitingDeviceType   UserStateType = "client_waiting_device_type"
+	StateClientWaitingDeviceBrand  UserStateType = "client_waiting_device_brand"
+	StateClientWaitingDeviceModel  UserStateType = "client_waiting_device_model"
+	StateClientWaitingProblem      UserStateType = "client_waiting_problem"
+	StateClientWaitingContactInfo  UserStateType = "client_waiting_contact_info"
+	StateClientConfirmingOrder     UserStateType = "client_confirming_order"
 )
 
 type UserState struct {
@@ -34,7 +41,7 @@ func (us *UserState) TableName() string {
 	return "user_states"
 }
 
-// OrderData структура для хранения данных заказа во время создания
+// OrderData структура для хранения данных заказа во время создания (администраторы)
 type OrderData struct {
 	CustomerName  string `json:"customer_name"`
 	CustomerPhone string `json:"customer_phone"`
@@ -42,4 +49,15 @@ type OrderData struct {
 	DeviceModel   string `json:"device_model"`
 	DeviceIssue   string `json:"device_issue"`
 	MasterID      uint   `json:"master_id,omitempty"`
+}
+
+// ClientOrderData структура для хранения данных заказа клиента во время создания
+type ClientOrderData struct {
+	DeviceType    string `json:"device_type"`
+	DeviceBrand   string `json:"device_brand"`
+	DeviceModel   string `json:"device_model"`
+	Problem       string `json:"problem"`
+	ContactName   string `json:"contact_name"`
+	ContactPhone  string `json:"contact_phone"`
+	SerialNumber  string `json:"serial_number,omitempty"`
 }

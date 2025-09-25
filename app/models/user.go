@@ -11,6 +11,7 @@ type UserRole string
 const (
 	UserRoleAdmin  UserRole = "admin"
 	UserRoleMaster UserRole = "master"
+	UserRoleClient UserRole = "client"
 )
 
 func (r UserRole) String() string {
@@ -18,7 +19,7 @@ func (r UserRole) String() string {
 }
 
 func (r UserRole) IsValid() bool {
-	return r == UserRoleAdmin || r == UserRoleMaster
+	return r == UserRoleAdmin || r == UserRoleMaster || r == UserRoleClient
 }
 
 type User struct {
@@ -45,6 +46,10 @@ func (u *User) IsAdmin() bool {
 
 func (u *User) IsMaster() bool {
 	return u.Role == UserRoleMaster
+}
+
+func (u *User) IsClient() bool {
+	return u.Role == UserRoleClient
 }
 
 func (u *User) FullName() string {
