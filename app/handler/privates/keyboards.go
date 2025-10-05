@@ -73,18 +73,19 @@ func getMainInlineKeyboard(userRole models.UserRole, lang string) tgbotapi.Inlin
 		// Клавиатура для админа
 		buttons = [][]tgbotapi.InlineKeyboardButton{
 			{
-				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("all_orders", lang), "all_orders"),
+				tgbotapi.NewInlineKeyboardButtonData("📋 Мои заказы", "admin_orders"),
 				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("new_order", lang), "new_order"),
 			},
 			{
 				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("masters", lang), "main_masters"),
+				tgbotapi.NewInlineKeyboardButtonData("👥 Клиенты", "main_clients"),
+			},
+			{
 				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("analytics", lang), "analytics"),
-			},
-			{
 				tgbotapi.NewInlineKeyboardButtonData("💰 Управление ценами", "pricing_menu"),
-				tgbotapi.NewInlineKeyboardButtonData("💸 Финансы", "financial_stats"),
 			},
 			{
+				tgbotapi.NewInlineKeyboardButtonData("💸 Финансы", "financial_stats"),
 				tgbotapi.NewInlineKeyboardButtonData(i18n.GetButton("search", lang), "search"),
 			},
 		}
@@ -444,6 +445,17 @@ func getMasterProfileKeyboard(masterID uint, isActive bool, lang string) tgbotap
 				"en": "📋 Master orders",
 			}, lang),
 			fmt.Sprintf("master_action_orders_%d", masterID)),
+	})
+
+	// Кнопка разжалования
+	buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData(
+			getText(map[string]string{
+				"ru": "⬇️ Разжаловать в клиенты",
+				"uz": "⬇️ Mijozga tushirish",
+				"en": "⬇️ Demote to client",
+			}, lang),
+			fmt.Sprintf("master_action_demote_%d", masterID)),
 	})
 
 	// Кнопки навигации

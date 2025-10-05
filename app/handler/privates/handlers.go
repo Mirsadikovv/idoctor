@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"log"
-	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -192,13 +191,13 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 	// Специальная обработка для составных callback data без разделения по параметрам
 	simpleCallbacks := []string{
 		"main_menu", "back_to_masters", "back_to_orders", "back_to_stats",
-		"all_orders", "new_order", "main_masters", "analytics", "search", "my_orders",
+		"all_orders", "new_order", "main_masters", "main_clients", "analytics", "search", "my_orders",
 		"stats_general", "stats_masters", "stats_refresh", "masters_refresh",
 		"masters_add", "help_contact", "orders_refresh", "masters_list_all", "masters_list_active",
 		"stats_period_today", "stats_period_yesterday", "stats_period_week",
 		"stats_period_month", "stats_period_year", "stats_period_all_time", "devices_refresh",
 		"pricing_menu", "financial_stats", "create_order", "client_orders", "pending_orders",
-		"confirm_order_yes", "confirm_order_no",
+		"confirm_order_yes", "confirm_order_no", "admin_orders",
 	}
 
 	for _, callback := range simpleCallbacks {
@@ -316,6 +315,12 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 		} else {
 			answerCallback(bot, callback.ID, i18n.GetText(i18n.NoAccess, lang))
 		}
+	case "main_clients":
+		if utils.IsAdmin(callback.From.ID, cfg) {
+			handleClientsMenuCallback(bot, callback, cfg, db, &user)
+		} else {
+			answerCallback(bot, callback.ID, i18n.GetText(i18n.NoAccess, lang))
+		}
 	case "analytics":
 		if utils.IsAdmin(callback.From.ID, cfg) {
 			handleAnalyticsCallback(bot, callback, cfg, db, &user)
@@ -326,6 +331,8 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 		admin.HandlePricingMenu(bot, callback, db, langCache)
 	case "financial_stats":
 		admin.HandleFinancialStats(bot, callback, db, langCache)
+	case "admin_orders":
+		admin.HandleAdminOrders(bot, callback, db, langCache)
 	case "device":
 		if len(parts) >= 3 && parts[1] == "details" {
 			deviceID, err := strconv.ParseUint(parts[2], 10, 32)
@@ -403,6 +410,9 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 		} else if strings.HasPrefix(action, "master_action_") {
 			// Обрабатываем master_action_* callback data
 			handleMasterActionCallback(bot, callback, cfg, db, &user, action)
+		} else if strings.HasPrefix(action, "client_action_") {
+			// Обрабатываем client_action_* callback data
+			handleClientActionCallback(bot, callback, cfg, db, &user, action)
 		} else if strings.HasPrefix(data, "device_status_set_") {
 			// Обработка device_status_set_<deviceID>_<status>
 			log.Printf("Processing device_status_set callback: data='%s'", data)
@@ -433,6 +443,20 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 			admin.HandleSetPartsPrice(bot, callback, db, langCache)
 		} else if strings.HasPrefix(action, "toggle_paid_") {
 			admin.HandleTogglePaid(bot, callback, db, langCache)
+		} else if strings.HasPrefix(data, "admin_orders_filter_") {
+			admin.HandleAdminOrdersFilter(bot, callback, db, langCache)
+		} else if strings.HasPrefix(data, "admin_orders_page_") {
+			admin.HandleAdminOrdersPage(bot, callback, db, langCache)
+		} else if strings.HasPrefix(data, "admin_order_details_") {
+			admin.HandleAdminOrderDetails(bot, callback, db, langCache)
+		} else if strings.HasPrefix(data, "admin_change_status_") {
+			admin.HandleAdminChangeStatus(bot, callback, db, langCache)
+		} else if strings.HasPrefix(data, "admin_set_status_") {
+			admin.HandleAdminSetStatus(bot, callback, db, langCache)
+		} else if strings.HasPrefix(data, "admin_assign_master_") {
+			admin.HandleAdminAssignMaster(bot, callback, db, langCache)
+		} else if strings.HasPrefix(data, "admin_do_assign_") {
+			admin.HandleAdminDoAssign(bot, callback, db, langCache)
 		} else if action == "create_order" {
 			// Создание заказа клиентом
 			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
@@ -1091,33 +1115,33 @@ func saveOrderToDB(db *gorm.DB, orderData *models.OrderData, createdBy *models.U
 }
 
 // generateUniqueOrderCode генерирует уникальный код заказа
-func generateUniqueOrderCode(db *gorm.DB) (string, error) {
-	const maxAttempts = 10
+// func generateUniqueOrderCode(db *gorm.DB) (string, error) {
+// 	const maxAttempts = 10
 
-	for attempt := 0; attempt < maxAttempts; attempt++ {
-		// Генерируем код в формате R + год (2 цифры) + месяц (2 цифры) + день (2 цифры) + случайные 4 цифры
-		now := time.Now()
-		randomPart := rand.Intn(9999)
-		code := fmt.Sprintf("R%02d%02d%02d%04d",
-			now.Year()%100,
-			now.Month(),
-			now.Day(),
-			randomPart)
+// 	for attempt := 0; attempt < maxAttempts; attempt++ {
+// 		// Генерируем код в формате R + год (2 цифры) + месяц (2 цифры) + день (2 цифры) + случайные 4 цифры
+// 		now := time.Now()
+// 		randomPart := rand.Intn(9999)
+// 		code := fmt.Sprintf("R%02d%02d%02d%04d",
+// 			now.Year()%100,
+// 			now.Month(),
+// 			now.Day(),
+// 			randomPart)
 
-		// Проверяем уникальность
-		var count int64
-		err := db.Model(&models.Device{}).Where("code = ?", code).Count(&count).Error
-		if err != nil {
-			return "", err
-		}
+// 		// Проверяем уникальность
+// 		var count int64
+// 		err := db.Model(&models.Device{}).Where("code = ?", code).Count(&count).Error
+// 		if err != nil {
+// 			return "", err
+// 		}
 
-		if count == 0 {
-			return code, nil
-		}
-	}
+// 		if count == 0 {
+// 			return code, nil
+// 		}
+// 	}
 
-	return "", fmt.Errorf("не удалось сгенерировать уникальный код за %d попыток", maxAttempts)
-}
+// 	return "", fmt.Errorf("не удалось сгенерировать уникальный код за %d попыток", maxAttempts)
+// }
 
 // notifyAdminsAboutNewOrder уведомляет всех администраторов о новом заказе
 func notifyAdminsAboutNewOrder(db *gorm.DB, device *models.Device, customer *models.Customer) error {
@@ -1641,6 +1665,72 @@ func handleMastersMenuCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.Callback
 	answerCallback(bot, callback.ID, "")
 }
 
+func handleClientsMenuCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
+	_ = user.GetLanguage() // lang не используется пока
+
+	// Получаем всех клиентов
+	var clients []models.User
+	if err := db.Where("role = ?", models.UserRoleClient).Order("created_at DESC").Find(&clients).Error; err != nil {
+		log.Printf("Error getting clients: %v", err)
+		answerCallback(bot, callback.ID, "Ошибка получения клиентов")
+		return
+	}
+
+	text := fmt.Sprintf("👥 *Клиенты* (%d)\n\n", len(clients))
+	text += "Выберите клиента для просмотра:"
+
+	// Создаем клавиатуру
+	var keyboard [][]tgbotapi.InlineKeyboardButton
+
+	// Показываем максимум 10 клиентов
+	maxClients := len(clients)
+	if maxClients > 10 {
+		maxClients = 10
+	}
+
+	for i := 0; i < maxClients; i += 2 {
+		var row []tgbotapi.InlineKeyboardButton
+
+		client := clients[i]
+		clientText := fmt.Sprintf("👤 %v %v", client.FirstName, client.LastName)
+		row = append(row, tgbotapi.NewInlineKeyboardButtonData(
+			clientText,
+			fmt.Sprintf("client_action_profile_%d", client.ID)))
+
+		// Второй клиент в ряду (если есть)
+		if i+1 < maxClients {
+			client2 := clients[i+1]
+			clientText2 := fmt.Sprintf("👤 %v %v", client2.FirstName, client2.LastName)
+			row = append(row, tgbotapi.NewInlineKeyboardButtonData(
+				clientText2,
+				fmt.Sprintf("client_action_profile_%d", client2.ID)))
+		}
+
+		keyboard = append(keyboard, row)
+	}
+
+	if len(clients) > 10 {
+		keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{
+			tgbotapi.NewInlineKeyboardButtonData(
+				fmt.Sprintf("... и еще %d клиентов", len(clients)-10),
+				"clients_show_more"),
+		})
+	}
+
+	// Кнопки управления
+	keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData("🔄 Обновить", "main_clients"),
+		tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "main_menu"),
+	})
+
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, text)
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(keyboard...)
+	msg.ParseMode = tgbotapi.ModeMarkdown
+
+	bot.Send(msg)
+	answerCallback(bot, callback.ID, "")
+}
+
 func handleAnalyticsCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User) {
 	update := tgbotapi.Update{
 		CallbackQuery: callback,
@@ -1834,6 +1924,9 @@ func handleMasterActionCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.Callbac
 	case "refresh":
 		// Обновить профиль мастера
 		handleMasterProfileCallback(bot, callback, cfg, db, user, masterID)
+	case "demote":
+		// Разжаловать мастера в клиенты
+		handleMasterDemoteCallback(bot, callback, cfg, db, user, masterID)
 	default:
 		answerCallback(bot, callback.ID, i18n.GetText(i18n.UnknownAction, user.GetLanguage()))
 	}
@@ -1969,6 +2062,260 @@ func handleMasterToggleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.Callbac
 	}
 
 	answerCallback(bot, callback.ID, fmt.Sprintf("✅ %s", statusText))
+}
+
+func handleMasterDemoteCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, masterID string) {
+	lang := user.GetLanguage()
+
+	// Проверяем права доступа (только админы)
+	if user.Role != models.UserRoleAdmin {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "❌ Нет доступа",
+			"uz": "❌ Ruxsat yo'q",
+			"en": "❌ Access denied",
+		}, lang))
+		return
+	}
+
+	// Конвертируем masterID в uint
+	id, err := strconv.ParseUint(masterID, 10, 32)
+	if err != nil {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Неверный ID мастера",
+			"uz": "Noto'g'ri usta ID",
+			"en": "Invalid master ID",
+		}, lang))
+		return
+	}
+
+	// Получаем мастера
+	var master models.User
+	if err := db.First(&master, id).Error; err != nil {
+		log.Printf("Error getting master: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Ошибка получения мастера",
+			"uz": "Ustani olishda xatolik",
+			"en": "Error getting master",
+		}, lang))
+		return
+	}
+
+	// Проверяем что это мастер
+	if master.Role != models.UserRoleMaster {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Пользователь не является мастером",
+			"uz": "Foydalanuvchi usta emas",
+			"en": "User is not a master",
+		}, lang))
+		return
+	}
+
+	// Проверяем, есть ли у мастера активные заказы
+	var activeOrdersCount int64
+	db.Model(&models.Device{}).Where("master_id = ? AND status NOT IN (?)", master.ID, []models.DeviceStatus{
+		models.DeviceStatusCompleted,
+		models.DeviceStatusCancelled,
+	}).Count(&activeOrdersCount)
+
+	if activeOrdersCount > 0 {
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": fmt.Sprintf("❌ У мастера есть %d активных заказов. Завершите их перед разжалованием", activeOrdersCount),
+			"uz": fmt.Sprintf("❌ Ustada %d ta faol buyurtma bor. Ularni tugatib bo'lgandan keyin tushiring", activeOrdersCount),
+			"en": fmt.Sprintf("❌ Master has %d active orders. Complete them before demotion", activeOrdersCount),
+		}, lang))
+		return
+	}
+
+	// Разжалуем мастера в клиенты
+	master.Role = models.UserRoleClient
+	if err := db.Save(&master).Error; err != nil {
+		log.Printf("Error demoting master: %v", err)
+		answerCallback(bot, callback.ID, i18n.GetText(map[string]string{
+			"ru": "Ошибка разжалования мастера",
+			"uz": "Ustani tushirishda xatolik",
+			"en": "Error demoting master",
+		}, lang))
+		return
+	}
+
+	// Уведомляем мастера о разжаловании
+	notifyText := i18n.GetText(map[string]string{
+		"ru": "⬇️ Вы были разжалованы в клиенты. Теперь вы можете создавать заказы как клиент.",
+		"uz": "⬇️ Siz mijozga tushirildingiz. Endi siz mijoz sifatida buyurtma yaratishingiz mumkin.",
+		"en": "⬇️ You have been demoted to client. You can now create orders as a client.",
+	}, lang)
+
+	notifyMsg := tgbotapi.NewMessage(master.TelegramID, notifyText)
+	if _, err := bot.Send(notifyMsg); err != nil {
+		log.Printf("Error sending demotion notification: %v", err)
+	}
+
+	// Отправляем подтверждение админу
+	confirmText := i18n.GetText(map[string]string{
+		"ru": fmt.Sprintf("✅ Мастер %v %v разжалован в клиенты", master.FirstName, master.LastName),
+		"uz": fmt.Sprintf("✅ Usta %v %v mijozga tushirildi", master.FirstName, master.LastName),
+		"en": fmt.Sprintf("✅ Master %v %v demoted to client", master.FirstName, master.LastName),
+	}, lang)
+
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, confirmText)
+	bot.Send(msg)
+
+	// Возвращаемся к списку мастеров
+	handleMastersListAllCallback(bot, callback, cfg, db, user)
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleClientActionCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, action string) {
+	// Парсим client_action_{action}_{clientID}
+	parts := strings.Split(action, "_")
+	if len(parts) < 4 {
+		answerCallback(bot, callback.ID, i18n.GetText(i18n.InvalidDataFormat, user.GetLanguage()))
+		return
+	}
+
+	clientAction := parts[2]
+	clientID := parts[3]
+
+	switch clientAction {
+	case "profile":
+		handleClientProfileCallback(bot, callback, cfg, db, user, clientID)
+	case "promote":
+		handleClientPromoteCallback(bot, callback, cfg, db, user, clientID)
+	default:
+		answerCallback(bot, callback.ID, i18n.GetText(i18n.UnknownAction, user.GetLanguage()))
+	}
+}
+
+func handleClientProfileCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, clientID string) {
+	_ = user.GetLanguage() // lang не используется пока
+
+	// Конвертируем clientID в uint
+	id, err := strconv.ParseUint(clientID, 10, 32)
+	if err != nil {
+		answerCallback(bot, callback.ID, "Неверный ID клиента")
+		return
+	}
+
+	// Получаем клиента
+	var client models.User
+	if err := db.First(&client, id).Error; err != nil {
+		log.Printf("Error getting client: %v", err)
+		answerCallback(bot, callback.ID, "Ошибка получения клиента")
+		return
+	}
+
+	// Получаем заказы клиента
+	var devices []models.Device
+	db.Preload("Master").Where("client_id = ?", client.ID).Order("created_at DESC").Find(&devices)
+
+	// Форматируем профиль
+	text := "👤 *Профиль клиента*\n\n"
+	text += fmt.Sprintf("*Имя:* %v %v\n", client.FirstName, client.LastName)
+	if client.Username != nil && *client.Username != "" {
+		text += fmt.Sprintf("*Username:* @%s\n", *client.Username)
+	}
+	text += fmt.Sprintf("*Telegram ID:* `%d`\n", client.TelegramID)
+	text += fmt.Sprintf("*Дата регистрации:* %s\n\n", client.CreatedAt.Format("02.01.2006"))
+
+	text += fmt.Sprintf("📋 *Заказов всего:* %d\n", len(devices))
+
+	if len(devices) > 0 {
+		// Статистика по статусам
+		statusCount := make(map[models.DeviceStatus]int)
+		for _, device := range devices {
+			statusCount[device.Status]++
+		}
+
+		if count, ok := statusCount[models.DeviceStatusCompleted]; ok {
+			text += fmt.Sprintf("✅ Завершено: %d\n", count)
+		}
+		if count, ok := statusCount[models.DeviceStatusInProgress]; ok {
+			text += fmt.Sprintf("🔧 В работе: %d\n", count)
+		}
+	}
+
+	// Создаем клавиатуру
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("⬆️ Повысить в мастера", fmt.Sprintf("client_action_promote_%d", client.ID)),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📋 Заказы клиента", fmt.Sprintf("client_orders_list_%d", client.ID)),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("👥 К списку клиентов", "main_clients"),
+			tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "main_menu"),
+		),
+	)
+
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, text)
+	msg.ReplyMarkup = keyboard
+	msg.ParseMode = tgbotapi.ModeMarkdown
+
+	bot.Send(msg)
+	answerCallback(bot, callback.ID, "")
+}
+
+func handleClientPromoteCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, clientID string) {
+	lang := user.GetLanguage()
+
+	// Проверяем права доступа (только админы)
+	if user.Role != models.UserRoleAdmin {
+		answerCallback(bot, callback.ID, "❌ Нет доступа")
+		return
+	}
+
+	// Конвертируем clientID в uint
+	id, err := strconv.ParseUint(clientID, 10, 32)
+	if err != nil {
+		answerCallback(bot, callback.ID, "Неверный ID клиента")
+		return
+	}
+
+	// Получаем клиента
+	var client models.User
+	if err := db.First(&client, id).Error; err != nil {
+		log.Printf("Error getting client: %v", err)
+		answerCallback(bot, callback.ID, "Ошибка получения клиента")
+		return
+	}
+
+	// Проверяем что это клиент
+	if client.Role != models.UserRoleClient {
+		answerCallback(bot, callback.ID, "Пользователь не является клиентом")
+		return
+	}
+
+	// Повышаем клиента в мастера
+	client.Role = models.UserRoleMaster
+	client.IsActive = true // Делаем активным по умолчанию
+	if err := db.Save(&client).Error; err != nil {
+		log.Printf("Error promoting client: %v", err)
+		answerCallback(bot, callback.ID, "Ошибка повышения клиента")
+		return
+	}
+
+	// Уведомляем клиента о повышении
+	notifyText := i18n.GetText(map[string]string{
+		"ru": "⬆️ Вы были повышены до мастера! Теперь вы можете принимать заказы в работу.",
+		"uz": "⬆️ Siz ustaga ko'tarildingiz! Endi buyurtmalarni qabul qilishingiz mumkin.",
+		"en": "⬆️ You have been promoted to master! You can now accept orders.",
+	}, lang)
+
+	notifyMsg := tgbotapi.NewMessage(client.TelegramID, notifyText)
+	if _, err := bot.Send(notifyMsg); err != nil {
+		log.Printf("Error sending promotion notification: %v", err)
+	}
+
+	// Отправляем подтверждение админу
+	confirmText := fmt.Sprintf("✅ Клиент %v %v повышен до мастера", client.FirstName, client.LastName)
+
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, confirmText)
+	bot.Send(msg)
+
+	// Возвращаемся к списку клиентов
+	handleClientsMenuCallback(bot, callback, cfg, db, user)
+	answerCallback(bot, callback.ID, "")
 }
 
 func handleMasterOrdersCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg *config.Config, db *gorm.DB, user *models.User, masterID string) {
