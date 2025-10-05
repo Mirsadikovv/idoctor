@@ -1,4 +1,4 @@
-package handlers
+package master
 
 import (
 	"fmt"
@@ -421,5 +421,72 @@ func formatMoney(amount float64) string {
 		return "Не указано"
 	}
 	return fmt.Sprintf("%.2f сум", amount)
+}
+
+// getPendingOrdersKeyboard возвращает клавиатуру для заказов в ожидании
+func getPendingOrdersKeyboard(devices []models.Device, lang string) tgbotapi.InlineKeyboardMarkup {
+	var buttons [][]tgbotapi.InlineKeyboardButton
+
+	for _, device := range devices {
+		if device.MasterID == nil && device.Status == models.DeviceStatusReceived {
+			text := fmt.Sprintf("📱 %s - %s", device.Code, device.DeviceType)
+			if len(text) > 30 {
+				text = text[:27] + "..."
+			}
+			buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
+				tgbotapi.NewInlineKeyboardButtonData(text, fmt.Sprintf("accept_order_%d", device.ID)),
+			})
+		}
+	}
+
+	// Кнопка обновления
+	buttons = append(buttons, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData("🔄 Обновить", "refresh_pending_orders"),
+	})
+
+	return tgbotapi.NewInlineKeyboardMarkup(buttons...)
+}
+
+// getStatusText возвращает текст статуса на нужном языке
+func getStatusText(status string, lang string) string {
+	statusMap := map[string]map[string]string{
+		"received": {
+			"ru": "🆕 Принят",
+			"uz": "🆕 Qabul qilindi",
+			"en": "🆕 Received",
+		},
+		"inProgress": {
+			"ru": "🔄 В работе",
+			"uz": "🔄 Ishda",
+			"en": "🔄 In Progress",
+		},
+		"ready": {
+			"ru": "✅ Готов",
+			"uz": "✅ Tayyor",
+			"en": "✅ Ready",
+		},
+		"completed": {
+			"ru": "🎯 Завершен",
+			"uz": "🎯 Yakunlangan",
+			"en": "🎯 Completed",
+		},
+		"cancelled": {
+			"ru": "❌ Отменен",
+			"uz": "❌ Bekor qilindi",
+			"en": "❌ Cancelled",
+		},
+	}
+
+	if statusTexts, exists := statusMap[status]; exists {
+		if text, exists := statusTexts[lang]; exists {
+			return text
+		}
+		// Fallback to Russian if language not found
+		if text, exists := statusTexts["ru"]; exists {
+			return text
+		}
+	}
+
+	return status // Return original status if no translation found
 }
 

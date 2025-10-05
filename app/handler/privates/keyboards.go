@@ -625,7 +625,7 @@ func getStatusSelectionKeyboard(deviceID uint, lang string) tgbotapi.InlineKeybo
 }
 
 // getPendingOrdersKeyboard возвращает клавиатуру для заказов в ожидании
-func getPendingOrdersKeyboard(devices []models.Device, lang string) tgbotapi.InlineKeyboardMarkup {
+func GetPendingOrdersKeyboard(devices []models.Device, lang string) tgbotapi.InlineKeyboardMarkup {
 	var buttons [][]tgbotapi.InlineKeyboardButton
 
 	for _, device := range devices {

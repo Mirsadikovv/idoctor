@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"idoctor-bot/app/config"
+	"idoctor-bot/app/handler/privates/admin"
+	"idoctor-bot/app/handler/privates/client"
+	"idoctor-bot/app/handler/privates/master"
 	"idoctor-bot/app/i18n"
 	"idoctor-bot/app/models"
 	"idoctor-bot/app/services"
@@ -61,7 +64,7 @@ func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Conf
 		stateService := services.NewStateService(db)
 		state, err := stateService.GetState(user.TelegramID)
 		if err == nil && state != nil && (state.State == "awaiting_repair_price" || state.State == "awaitingParts_price") {
-			HandlePriceInput(bot, update.Message, db, langCache)
+			admin.HandlePriceInput(bot, update.Message, db, langCache)
 			return
 		}
 	}
@@ -127,25 +130,25 @@ func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Conf
 		case i18n.GetText(i18n.CreateOrder, lang):
 			if user.IsClient() {
 				// Создание заказа клиентом
-				HandleCreateOrder(bot, update, db, langCache)
+				client.HandleCreateOrder(bot, update, db, langCache)
 			} else {
 				sendMessage(bot, update.Message.Chat.ID, i18n.GetText(i18n.NoAccess, lang))
 			}
 		case i18n.GetText(i18n.MyOrders, lang):
 			if user.IsClient() {
-				HandleClientOrders(bot, update, db, langCache)
+				master.HandleClientOrders(bot, update, db, langCache)
 			} else {
 				MyOrders(bot, update, cfg, db, langCache)
 			}
 		case i18n.GetText(i18n.OrderStatus, lang):
 			if user.IsClient() {
-				HandleClientOrders(bot, update, db, langCache)
+				master.HandleClientOrders(bot, update, db, langCache)
 			} else {
 				sendMessage(bot, update.Message.Chat.ID, i18n.GetText(i18n.NoAccess, lang))
 			}
 		case i18n.GetText(i18n.PendingOrders, lang):
 			if user.IsMaster() {
-				HandlePendingOrders(bot, update, db, langCache)
+				master.HandlePendingOrders(bot, update, db, langCache)
 			} else {
 				sendMessage(bot, update.Message.Chat.ID, i18n.GetText(i18n.NoAccess, lang))
 			}
@@ -320,9 +323,9 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 			answerCallback(bot, callback.ID, i18n.GetText(i18n.NoAccess, lang))
 		}
 	case "pricing_menu":
-		HandlePricingMenu(bot, callback, db, langCache)
+		admin.HandlePricingMenu(bot, callback, db, langCache)
 	case "financial_stats":
-		HandleFinancialStats(bot, callback, db, langCache)
+		admin.HandleFinancialStats(bot, callback, db, langCache)
 	case "device":
 		if len(parts) >= 3 && parts[1] == "details" {
 			deviceID, err := strconv.ParseUint(parts[2], 10, 32)
@@ -419,41 +422,41 @@ func HandleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, cfg 
 				answerCallback(bot, callback.ID, i18n.GetText(i18n.InvalidDataFormat, lang))
 			}
 		} else if action == "pricing_menu" {
-			HandlePricingMenu(bot, callback, db, langCache)
+			admin.HandlePricingMenu(bot, callback, db, langCache)
 		} else if action == "financial_stats" {
-			HandleFinancialStats(bot, callback, db, langCache)
+			admin.HandleFinancialStats(bot, callback, db, langCache)
 		} else if strings.HasPrefix(action, "pricing_device_") {
-			HandleDevicePricing(bot, callback, db, langCache)
+			admin.HandleDevicePricing(bot, callback, db, langCache)
 		} else if strings.HasPrefix(action, "set_repair_price_") {
-			HandleSetRepairPrice(bot, callback, db, langCache)
+			admin.HandleSetRepairPrice(bot, callback, db, langCache)
 		} else if strings.HasPrefix(action, "set_parts_price_") {
-			HandleSetPartsPrice(bot, callback, db, langCache)
+			admin.HandleSetPartsPrice(bot, callback, db, langCache)
 		} else if strings.HasPrefix(action, "toggle_paid_") {
-			HandleTogglePaid(bot, callback, db, langCache)
+			admin.HandleTogglePaid(bot, callback, db, langCache)
 		} else if action == "create_order" {
 			// Создание заказа клиентом
 			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
-			HandleCreateOrder(bot, callbackUpdate, db, langCache)
+			client.HandleCreateOrder(bot, callbackUpdate, db, langCache)
 		} else if action == "client_orders" {
 			// Заказы клиента
 			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
-			HandleClientOrders(bot, callbackUpdate, db, langCache)
+			master.HandleClientOrders(bot, callbackUpdate, db, langCache)
 		} else if action == "pending_orders" {
 			// Заказы в ожидании для мастеров
 			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
-			HandlePendingOrders(bot, callbackUpdate, db, langCache)
+			master.HandlePendingOrders(bot, callbackUpdate, db, langCache)
 		} else if strings.HasPrefix(data, "accept_order_") {
 			// Принятие заказа мастером
 			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
-			HandleAcceptOrder(bot, callbackUpdate, db, langCache)
+			master.HandleAcceptOrder(bot, callbackUpdate, db, langCache)
 		} else if strings.HasPrefix(data, "order_details_") {
 			// Детали заказа
 			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
-			HandleOrderDetails(bot, callbackUpdate, db, langCache)
+			master.HandleOrderDetails(bot, callbackUpdate, db, langCache)
 		} else if action == "confirm_order_yes" || action == "confirm_order_no" {
 			// Подтверждение заказа клиентом
 			callbackUpdate := tgbotapi.Update{CallbackQuery: callback}
-			HandleOrderConfirm(bot, callbackUpdate, db, langCache)
+			client.HandleOrderConfirm(bot, callbackUpdate, db, langCache)
 		} else {
 			answerCallback(bot, callback.ID, i18n.GetText(i18n.UnknownAction, lang))
 		}
@@ -508,7 +511,7 @@ func handleUserState(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.C
 		models.StateClientWaitingContactName,
 		models.StateClientWaitingContactPhone:
 		// Перенаправляем на обработчик клиентских заказов
-		HandleClientOrderMessage(bot, update, db, langCache)
+		client.HandleClientOrderMessage(bot, update, db, langCache)
 		return true
 	default:
 		return false

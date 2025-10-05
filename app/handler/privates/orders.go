@@ -104,7 +104,7 @@ func AllOrders(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config,
 			len(devices))
 
 		for status, count := range statusCount {
-			statusText := getStatusText(status, lang)
+			statusText := GetStatusText(status, lang)
 			messageText += fmt.Sprintf("%s: %d\n", statusText, count)
 		}
 
@@ -321,7 +321,7 @@ func handleOrderDetails(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, 
 			"ru": "Статус",
 			"uz": "Status",
 			"en": "Status",
-		}, lang), getStatusText(device.Status, lang))
+		}, lang), GetStatusText(device.Status, lang))
 
 	if device.Price != nil {
 		messageText += fmt.Sprintf("💰 *%s:* %.0f %s\n",
@@ -444,7 +444,7 @@ func handleStatusChange(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, 
 	}
 
 	// Отправляем подтверждение
-	statusText := getStatusText(newStatus, lang)
+	statusText := GetStatusText(newStatus, lang)
 	successMessage := fmt.Sprintf("%s\n\n✅ %s: %s",
 		i18n.GetText(map[string]string{
 			"ru": "Статус успешно обновлен!",
@@ -593,7 +593,7 @@ func showStatusChangeMenu(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery
 	statuses := []string{"received", "inProgress", "waitingParts", "ready", "completed", "cancelled"}
 
 	for _, status := range statuses {
-		statusText := getStatusText(status, lang)
+		statusText := GetStatusText(status, lang)
 		keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{
 			tgbotapi.NewInlineKeyboardButtonData(statusText, fmt.Sprintf("status_set_%d_%s", orderID, status)),
 		})
@@ -703,7 +703,7 @@ func handleBackToOrders(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, 
 	handleOrdersRefresh(bot, callback, cfg, db, user)
 }
 
-// getStatusText возвращает перевод статуса на указанный язык
+// GetStatusText возвращает перевод статуса на указанный язык
 // sendOrdersList отправляет список заказов с интерактивными кнопками
 func sendOrdersList(bot *tgbotapi.BotAPI, chatID int64, devices []api.Device, lang string, isAdmin bool) {
 	if len(devices) == 0 {
@@ -740,7 +740,7 @@ func sendOrdersList(bot *tgbotapi.BotAPI, chatID int64, devices []api.Device, la
 		var keyboard [][]tgbotapi.InlineKeyboardButton
 
 		for i, device := range pageDevices {
-			status := getStatusText(device.Status, lang)
+			status := GetStatusText(device.Status, lang)
 			deviceText := fmt.Sprintf("%d. %s %s\n⚡️ %s\n",
 				start+i+1, device.Brand, device.Model, status)
 
@@ -967,7 +967,7 @@ func generateOrderCode(db *gorm.DB) (string, error) {
 	return "", fmt.Errorf("не удалось сгенерировать уникальный код")
 }
 
-func getStatusText(status string, lang string) string {
+func GetStatusText(status string, lang string) string {
 	statusMap := map[string]map[string]string{
 		"received": {
 			"ru": "🆕 Принят",
